@@ -1,11 +1,12 @@
 mod console;
+mod csv;
 
 use bumpalo::{
     collections::{String, Vec},
     Bump,
 };
 
-pub use self::console::ConsoleTraceListener;
+pub use self::{console::ConsoleTraceListener, csv::CsvTraceListener};
 use crate::{
     reactor::{Reactor, StringArraySource, StringSource},
     reader::Reader,
@@ -14,7 +15,6 @@ use crate::{
 
 pub trait StringTraceListener {
     fn on_string(&mut self, instr_offset: u32, source: StringSource, s: String);
-    fn on_string_array(&mut self, instr_offset: u32, source: StringArraySource, s: Vec<String>);
 }
 
 pub struct StringTraceReactor<'a, L> {
@@ -77,8 +77,15 @@ impl<'a, L: StringTraceListener> Reactor for StringTraceReactor<'a, L> {
             let s = decode_sjis_string(&self.bump, s, fixup).unwrap();
             res.push(s);
         }
-        self.listener
-            .on_string_array(self.current_instr_offset, source, res)
+
+        let source_maker = match source {
+            StringArraySource::Select => StringSource::SelectChoice,
+        };
+
+        for (i, s) in res.into_iter().enumerate() {
+            self.listener
+                .on_string(self.current_instr_offset, source_maker(i as u32), s)
+        }
     }
 
     fn msgid(&mut self) -> u32 {

@@ -64,6 +64,8 @@ impl<R: Reactor> Ctx<R> {
             | StringSource::Dbgout
             | StringSource::Voiceplay => self.reactor.u8string(false, source),
             StringSource::Msgset(_) | StringSource::Logset => self.reactor.u16string(true, source),
+            // only emitted by the tracer
+            StringSource::SelectChoice(_) => unreachable!(),
         }
     }
 

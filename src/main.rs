@@ -5,9 +5,12 @@ mod reader;
 mod text;
 
 use ctx::{Ctx, Version};
-use reactor::{ConsoleTraceListener, Reactor};
+use reactor::Reactor;
 
-use crate::{reactor::StringTraceReactor, reader::Reader};
+use crate::{
+    reactor::{CsvTraceListener, StringTraceReactor},
+    reader::Reader,
+};
 
 fn react<R: Reactor>(ctx: &mut Ctx<R>) {
     while ctx.has_instr() {
@@ -30,8 +33,10 @@ fn main() {
     assert_eq!(&snr_file[0..4], b"SNR ");
     let code_offset = u32::from_le_bytes(snr_file[0x20..0x24].try_into().unwrap());
 
+    let writer = csv::Writer::from_path("string.csv").unwrap();
+
     let reader = Reader::new(&snr_file, code_offset as usize);
-    let reactor = StringTraceReactor::new(reader, ConsoleTraceListener);
+    let reactor = StringTraceReactor::new(reader, CsvTraceListener::new(writer));
 
     let mut ctx = Ctx::new(reactor, Version::AstralAir);
     react(&mut ctx);

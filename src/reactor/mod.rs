@@ -1,7 +1,7 @@
 mod reader;
 mod trace;
 
-pub use trace::{ConsoleTraceListener, StringTraceReactor};
+pub use trace::{ConsoleTraceListener, CsvTraceListener, StringTraceReactor};
 
 pub trait Reactor {
     fn byte(&mut self) -> u8;
@@ -20,14 +20,29 @@ pub trait Reactor {
     fn debug_loc(&self) -> String;
 }
 
-#[derive(Debug)]
+#[derive(Debug, Copy, Clone)]
 pub enum StringSource {
     Saveinfo,
     Select,
+    SelectChoice(u32),
     Msgset(u32),
     Dbgout,
     Logset,
     Voiceplay,
+}
+
+impl StringSource {
+    pub fn subindex(&self) -> u32 {
+        match *self {
+            StringSource::Saveinfo => 0,
+            StringSource::Select => 0,
+            StringSource::SelectChoice(i) => i,
+            StringSource::Msgset(i) => i,
+            StringSource::Dbgout => 0,
+            StringSource::Logset => 0,
+            StringSource::Voiceplay => 0,
+        }
+    }
 }
 
 #[derive(Debug)]
