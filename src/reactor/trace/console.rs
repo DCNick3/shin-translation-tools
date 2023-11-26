@@ -1,6 +1,6 @@
 use bumpalo::collections;
 
-use crate::reactor::{trace::StringTraceListener, StringArraySource, StringSource};
+use crate::reactor::{trace::StringTraceListener, StringSource};
 
 pub struct ConsoleTraceListener;
 

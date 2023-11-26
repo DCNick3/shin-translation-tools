@@ -53,7 +53,6 @@ impl<'a, L: StringTraceListener> Reactor for StringTraceReactor<'a, L> {
     }
 
     fn u8string(&mut self, fixup: bool, source: StringSource) {
-        // TODO: use bump allocator or smth
         let s = self.reader.u8string();
         let s = decode_sjis_string(&self.bump, s, fixup).unwrap();
         self.listener

@@ -3,6 +3,8 @@ use crate::{
     reader::Reader,
 };
 
+// why do we need it, again?
+#[allow(dead_code)]
 pub struct ReaderReactor<'a> {
     reader: Reader<'a>,
 }

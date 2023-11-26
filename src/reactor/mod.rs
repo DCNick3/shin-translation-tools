@@ -1,6 +1,9 @@
 mod reader;
+mod rewrite;
 mod trace;
 
+pub use reader::ReaderReactor;
+pub use rewrite::RewriteReactor;
 pub use trace::{ConsoleTraceListener, CsvTraceListener, StringTraceReactor};
 
 pub trait Reactor {

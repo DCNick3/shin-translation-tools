@@ -1,6 +1,8 @@
+use clap::ValueEnum;
+
 use crate::reactor::{Reactor, StringArraySource, StringSource};
 
-#[derive(Copy, Clone, Ord, PartialOrd, Eq, PartialEq)]
+#[derive(Copy, Clone, Ord, PartialOrd, Eq, PartialEq, ValueEnum)]
 pub enum Version {
     AstralAir,
 }
