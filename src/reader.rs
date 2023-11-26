@@ -1,3 +1,4 @@
+#[derive(Clone)]
 pub struct Reader<'a> {
     data: &'a [u8],
     pos: usize,
@@ -10,6 +11,13 @@ impl<'a> Reader<'a> {
 }
 
 impl<'a> Reader<'a> {
+    pub fn rewind(&self, position: u32) -> Self {
+        Self {
+            data: self.data,
+            pos: position as usize,
+        }
+    }
+
     pub fn take(&mut self, size: usize) -> &[u8] {
         let res = &self.data[self.pos..self.pos + size];
         self.pos += size;

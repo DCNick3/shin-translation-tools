@@ -68,7 +68,7 @@ fn is_extended(c: u8) -> bool {
 /// But the game engine itself uses UTF-8
 /// This function converts (a variant of) Shift-JIS to UTF-8
 /// This function stops reading either at the first null byte or when byte_size bytes have been read
-pub fn decode_sjis_string<'bump>(
+pub fn decode_sjis_zstring<'bump>(
     bump: &'bump Bump,
     mut s: &[u8],
     fixup: bool,
@@ -146,7 +146,7 @@ fn map_char_to_sjis(c: char) -> Option<u16> {
 }
 
 /// Calculate the size of a string in Shift-JIS
-pub fn measure_sjis_string(s: &str) -> io::Result<usize> {
+pub fn measure_sjis_zstring(s: &str) -> io::Result<usize> {
     let mut result = 0;
 
     for c in s.chars() {
@@ -171,13 +171,27 @@ pub fn measure_sjis_string(s: &str) -> io::Result<usize> {
             _ => unreachable!(),
         }
     }
+    // NUL terminator
+    result += 1;
 
     Ok(result)
 }
 
 /// Encode a string in Shift-JIS
-pub fn write_sjis_string<T: io::Write>(s: &str, dest: &mut T) -> io::Result<()> {
+pub fn encode_sjis_zstring<'bump>(
+    bump: &'bump Bump,
+    s: &str,
+    fixup: bool,
+) -> io::Result<bumpalo::collections::Vec<'bump, u8>> {
+    let mut output = bumpalo::collections::Vec::with_capacity_in(s.len(), bump);
+
     for c in s.chars() {
+        let c = if fixup {
+            FIXUP_ENCODE_TABLE.get(&c).copied().unwrap_or(c)
+        } else {
+            c
+        };
+
         // NOTE: the game impl emits ※ (81A6 in Shift-JIS) for unmappable chars
         // we are more conservative and just error out
         let sjis = map_char_to_sjis(c).ok_or_else(|| {
@@ -190,13 +204,14 @@ pub fn write_sjis_string<T: io::Write>(s: &str, dest: &mut T) -> io::Result<()> 
         match sjis {
             0x00..=0xff => {
                 // single-byte
-                dest.write_all(&[sjis as u8])?;
+                output.push(sjis as u8);
             }
             0x100..=0xffff => {
                 // double-byte
                 let hi = (sjis >> 8) as u8;
                 let lo = (sjis & 0xff) as u8;
-                dest.write_all(&[hi, lo])?;
+                output.push(hi);
+                output.push(lo);
             }
             // work around rust-intellij bug
             #[allow(unreachable_patterns)]
@@ -204,7 +219,9 @@ pub fn write_sjis_string<T: io::Write>(s: &str, dest: &mut T) -> io::Result<()> 
         }
     }
 
-    Ok(())
+    output.push(0);
+
+    Ok(output)
 }
 
 const FIXUP_ENCODED: &str = "｢｣ｧｨｩｪｫｬｭｮｱｲｳｴｵｶｷｸｹｺｻｼｽｾｿﾀﾁﾂﾃﾄﾅﾆﾇﾈﾉﾊﾋﾌﾍﾎﾏﾐﾑﾒﾓﾔﾕﾖﾗﾘﾙﾚﾛﾜｦﾝｰｯ､ﾟﾞ･?｡";
@@ -250,11 +267,10 @@ mod tests {
     #[test]
     fn test_sjis() {
         let mut bump = Bump::new();
-        let s = b"\x82\xa0\x82\xa2\x82\xa4\x82\xa6\x82\xa8";
-        let s = decode_sjis_string(&bump, s).unwrap();
+        let s = b"\x82\xa0\x82\xa2\x82\xa4\x82\xa6\x82\xa8\x00";
+        let s = decode_sjis_zstring(&bump, s, false).unwrap();
         assert_eq!(s, "あいうえお");
-        let mut encoded = Vec::new();
-        write_sjis_string(&s, &mut encoded).unwrap();
-        assert_eq!(encoded, b"\x82\xa0\x82\xa2\x82\xa4\x82\xa6\x82\xa8");
+        let encoded = encode_sjis_zstring(&bump, &s, false).unwrap();
+        assert_eq!(encoded, b"\x82\xa0\x82\xa2\x82\xa4\x82\xa6\x82\xa8\x00");
     }
 }

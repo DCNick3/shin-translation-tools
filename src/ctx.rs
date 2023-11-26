@@ -21,13 +21,13 @@ impl Version {
     }
 }
 
-pub struct Ctx<R> {
-    reactor: R,
+pub struct Ctx<'r, R> {
+    reactor: &'r mut R,
     version: Version,
 }
 
-impl<R: Reactor> Ctx<R> {
-    pub fn new(reactor: R, version: Version) -> Self {
+impl<'r, R: Reactor> Ctx<'r, R> {
+    pub fn new(reactor: &'r mut R, version: Version) -> Self {
         Self { reactor, version }
     }
 

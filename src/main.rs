@@ -15,7 +15,11 @@ use ctx::{Ctx, Version};
 use reactor::Reactor;
 
 use crate::{
-    reactor::{ConsoleTraceListener, CsvTraceListener, RewriteReactor, StringTraceReactor},
+    reactor::{
+        offset_validator::OffsetValidatorReactor,
+        rewrite::{RewriteReactor, XRewriter},
+        trace::{ConsoleTraceListener, CsvTraceListener, StringTraceReactor},
+    },
     reader::Reader,
 };
 
@@ -34,7 +38,7 @@ fn react_impl<R: Reactor>(ctx: &mut Ctx<R>) {
     }
 }
 
-fn react_with<R: Reactor>(reactor: R, version: Version) {
+fn react_with<R: Reactor>(reactor: &mut R, version: Version) {
     let mut ctx = Ctx::new(reactor, version);
     react_impl(&mut ctx);
 }
@@ -54,6 +58,8 @@ enum Command {
     Read { output: Utf8PathBuf },
     /// Read strings from an SNR file and dump them to the console
     ReadConsole {},
+    /// Read SNR file, while validating jump offsets in the code
+    ReadValidateOffsets {},
     /// Rewrite an SNR file to use translated strings from a CSV file
     Rewrite {
         translations: Utf8PathBuf,
@@ -76,14 +82,28 @@ fn main() {
         Command::Read { output } => {
             let writer = csv::Writer::from_path(output).expect("Opening the CSV file failed");
 
-            let reactor = StringTraceReactor::new(reader, CsvTraceListener::new(writer));
+            let mut reactor = StringTraceReactor::new(reader, CsvTraceListener::new(writer));
 
-            react_with(reactor, version);
+            react_with(&mut reactor, version);
         }
         Command::ReadConsole {} => {
-            let reactor = StringTraceReactor::new(reader, ConsoleTraceListener);
+            let mut reactor = StringTraceReactor::new(reader, ConsoleTraceListener);
 
-            react_with(reactor, version);
+            react_with(&mut reactor, version);
+        }
+        Command::ReadValidateOffsets {} => {
+            let mut reactor = OffsetValidatorReactor::new(reader);
+
+            react_with(&mut reactor, version);
+
+            match reactor.validate() {
+                Ok(_) => {
+                    println!("All offsets are valid");
+                }
+                Err(e) => {
+                    println!("{}", e);
+                }
+            }
         }
         Command::Rewrite {
             translations,
@@ -97,8 +117,11 @@ fn main() {
                 .write_all(&snr_file[0..code_offset as usize])
                 .expect("Writing to the output file failed");
 
-            let reactor = RewriteReactor::new(reader, (), &mut output);
-            react_with(reactor, version);
+            let mut reactor = RewriteReactor::new(reader, XRewriter, code_offset);
+            react_with(&mut reactor, version);
+
+            let mut reactor = reactor.into_emit(&mut output);
+            react_with(&mut reactor, version);
 
             // align the file size to 16 bytes
             let mut output = output

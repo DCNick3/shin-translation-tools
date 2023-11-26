@@ -10,7 +10,7 @@ pub use self::{console::ConsoleTraceListener, csv::CsvTraceListener};
 use crate::{
     reactor::{Reactor, StringArraySource, StringSource},
     reader::Reader,
-    text::decode_sjis_string,
+    text::decode_sjis_zstring,
 };
 
 pub trait StringTraceListener {
@@ -54,14 +54,14 @@ impl<'a, L: StringTraceListener> Reactor for StringTraceReactor<'a, L> {
 
     fn u8string(&mut self, fixup: bool, source: StringSource) {
         let s = self.reader.u8string();
-        let s = decode_sjis_string(&self.bump, s, fixup).unwrap();
+        let s = decode_sjis_zstring(&self.bump, s, fixup).unwrap();
         self.listener
             .on_string(self.current_instr_offset, source, s)
     }
 
     fn u16string(&mut self, fixup: bool, source: StringSource) {
         let s = self.reader.u16string();
-        let s = decode_sjis_string(&self.bump, s, fixup).unwrap();
+        let s = decode_sjis_zstring(&self.bump, s, fixup).unwrap();
         self.listener
             .on_string(self.current_instr_offset, source, s)
     }
@@ -73,7 +73,7 @@ impl<'a, L: StringTraceListener> Reactor for StringTraceReactor<'a, L> {
         }
         let mut res = Vec::new_in(&self.bump);
         for s in s.split(|&v| v == 0) {
-            let s = decode_sjis_string(&self.bump, s, fixup).unwrap();
+            let s = decode_sjis_zstring(&self.bump, s, fixup).unwrap();
             res.push(s);
         }
 
