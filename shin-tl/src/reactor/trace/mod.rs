@@ -87,6 +87,27 @@ impl<'a, L: StringTraceListener> Reactor for StringTraceReactor<'a, L> {
         }
     }
 
+    fn u16string_array(&mut self, fixup: bool, source: StringArraySource) {
+        let mut s = self.reader.u16string_array();
+        while s.last() == Some(&0) {
+            s = &s[..s.len() - 1];
+        }
+        let mut res = Vec::new_in(&self.bump);
+        for s in s.split(|&v| v == 0) {
+            let s = decode_sjis_zstring(&self.bump, s, fixup).unwrap();
+            res.push(s);
+        }
+
+        let source_maker = match source {
+            StringArraySource::Select => StringSource::SelectChoice,
+        };
+
+        for (i, s) in res.into_iter().enumerate() {
+            self.listener
+                .on_string(self.current_instr_offset, source_maker(i as u32), s)
+        }
+    }
+
     fn msgid(&mut self) -> u32 {
         self.reader.msgid()
     }

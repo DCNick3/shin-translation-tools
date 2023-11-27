@@ -1,8 +1,12 @@
 [workspace]
 resolver = "2"
 members = [
+    "shin-versions",
     "shin-tl",
 ]
+
+[workspace.dependencies]
+clap = "4.4.8"
 
 # Config for 'cargo dist'
 [workspace.metadata.dist]

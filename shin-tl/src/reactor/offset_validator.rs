@@ -53,6 +53,10 @@ impl<'a> Reactor for OffsetValidatorReactor<'a> {
         self.reader.u8string_array();
     }
 
+    fn u16string_array(&mut self, _fixup: bool, _source: StringArraySource) {
+        self.reader.u16string_array();
+    }
+
     fn msgid(&mut self) -> u32 {
         self.reader.msgid()
     }

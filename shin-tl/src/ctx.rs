@@ -1,33 +1,14 @@
-use clap::ValueEnum;
+use shin_versions::{LengthSize, NumberSpecStyle, ShinVersion, StringStyle};
 
 use crate::reactor::{Reactor, StringArraySource, StringSource};
 
-#[derive(Copy, Clone, Ord, PartialOrd, Eq, PartialEq, ValueEnum)]
-pub enum Version {
-    AstralAir,
-}
-
-enum NumberImpl {
-    Short,
-    #[allow(unused)]
-    VarInt,
-}
-
-impl Version {
-    fn number_impl(&self) -> NumberImpl {
-        match self {
-            Version::AstralAir => NumberImpl::Short,
-        }
-    }
-}
-
 pub struct Ctx<'r, R> {
     reactor: &'r mut R,
-    version: Version,
+    version: ShinVersion,
 }
 
 impl<'r, R: Reactor> Ctx<'r, R> {
-    pub fn new(reactor: &'r mut R, version: Version) -> Self {
+    pub fn new(reactor: &'r mut R, version: ShinVersion) -> Self {
         Self { reactor, version }
     }
 
@@ -44,11 +25,11 @@ impl<'r, R: Reactor> Ctx<'r, R> {
     }
 
     pub fn number(&mut self) {
-        match self.version.number_impl() {
-            NumberImpl::Short => {
+        match self.version.number_spec_style() {
+            NumberSpecStyle::Short => {
                 self.short();
             }
-            NumberImpl::VarInt => {
+            NumberSpecStyle::VarInt => {
                 todo!()
             }
         }
@@ -59,21 +40,21 @@ impl<'r, R: Reactor> Ctx<'r, R> {
     }
 
     pub fn string(&mut self, source: StringSource) {
-        // TODO: switch on version for string size
-        match source {
-            StringSource::Saveinfo
-            | StringSource::Select
-            | StringSource::Dbgout
-            | StringSource::Voiceplay => self.reactor.u8string(false, source),
-            StringSource::Msgset(_) | StringSource::Logset => self.reactor.u16string(true, source),
-            // only emitted by the tracer
-            StringSource::SelectChoice(_) => unreachable!(),
+        let StringStyle { length_size, fixup } = self.version.string_style(source.kind());
+
+        match length_size {
+            LengthSize::U8Length => self.reactor.u8string(fixup, source),
+            LengthSize::U16Length => self.reactor.u16string(fixup, source),
         }
     }
 
     pub fn string_array(&mut self, source: StringArraySource) {
-        // TODO: switch on string source/version combinations
-        self.reactor.u8string_array(true, source)
+        let StringStyle { length_size, fixup } = self.version.string_array_style(source.kind());
+
+        match length_size {
+            LengthSize::U8Length => self.reactor.u8string_array(fixup, source),
+            LengthSize::U16Length => self.reactor.u16string_array(fixup, source),
+        }
     }
 
     pub fn bitmask_number_array(&mut self) {

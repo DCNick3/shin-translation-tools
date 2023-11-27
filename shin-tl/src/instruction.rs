@@ -7,6 +7,9 @@ use crate::{
 #[derive(Debug, Copy, Clone)]
 pub enum Instruction {
     // Instructions
+    // they do not affect the game state and are internal to the VM
+    // these do not seem to change between versions
+    // NOTE: not all implemented opcodes are implemented here, because I am lazy
     uo,
     bo,
     exp,
@@ -29,6 +32,10 @@ pub enum Instruction {
     r#return,
 
     // Commands
+    // they yield to the game loop and are what affects the game state
+    // they can be interpreted differently in different contexts (e.g. running the ADV vs building the log)
+    // they do tend to change between versions
+    // NOTE: I believe currently all Astral air opcodes are listed here
     EXIT,
     SGET,
     SSET,

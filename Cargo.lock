@@ -207,7 +207,15 @@ dependencies = [
  "csv",
  "once_cell",
  "serde",
+ "shin-versions",
  "smallvec",
+]
+
+[[package]]
+name = "shin-versions"
+version = "0.2.1"
+dependencies = [
+ "clap",
 ]
 
 [[package]]

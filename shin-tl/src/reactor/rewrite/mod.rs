@@ -297,6 +297,43 @@ impl<'a, R: Rewriter, M: RewriteMode> Reactor for RewriteReactor<'a, R, M> {
         self.mode.write(res.as_slice());
     }
 
+    fn u16string_array(&mut self, fixup: bool, source: StringArraySource) {
+        let mut s = self.reader.u16string_array();
+        while s.last() == Some(&0) {
+            s = &s[..s.len() - 1];
+        }
+
+        let source_maker = match source {
+            StringArraySource::Select => StringSource::SelectChoice,
+        };
+
+        let mut res = Vec::new_in(&self.bump);
+        for (i, s) in s.split(|&v| v == 0).enumerate() {
+            if let Some(s) = self.rewriter.rewrite_string(
+                &self.bump,
+                self.current_str_index,
+                self.current_instr_offset,
+                source_maker(i as u32),
+            ) {
+                // encode_sjis_zstring already adds a NUL terminator
+                res.extend_from_slice(
+                    encode_sjis_zstring(&self.bump, &s, fixup)
+                        .unwrap()
+                        .as_slice(),
+                );
+            } else {
+                res.extend_from_slice(s);
+                res.push(0);
+            }
+
+            self.current_str_index += 1;
+        }
+        res.push(0);
+
+        self.mode.short(res.len() as u16);
+        self.mode.write(res.as_slice());
+    }
+
     fn msgid(&mut self) -> u32 {
         self.mode.msgid(self.reader.msgid())
     }

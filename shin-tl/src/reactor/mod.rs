@@ -1,3 +1,5 @@
+use shin_versions::{StringArrayKind, StringKind};
+
 pub mod offset_validator;
 pub mod rewrite;
 pub mod trace;
@@ -10,6 +12,7 @@ pub trait Reactor {
     fn u8string(&mut self, fixup: bool, source: StringSource);
     fn u16string(&mut self, fixup: bool, source: StringSource);
     fn u8string_array(&mut self, fixup: bool, source: StringArraySource);
+    fn u16string_array(&mut self, fixup: bool, source: StringArraySource);
     fn msgid(&mut self) -> u32;
 
     fn instr_start(&mut self);
@@ -24,6 +27,7 @@ pub trait Reactor {
 pub enum StringSource {
     Saveinfo,
     Select,
+    // TODO: this should really go into a separate file
     SelectChoice(u32),
     Msgset(u32),
     Dbgout,
@@ -32,6 +36,18 @@ pub enum StringSource {
 }
 
 impl StringSource {
+    pub fn kind(&self) -> StringKind {
+        match *self {
+            StringSource::Saveinfo => StringKind::Saveinfo,
+            StringSource::Select => StringKind::SelectTitle,
+            StringSource::SelectChoice(_) => unreachable!(),
+            StringSource::Msgset(_) => StringKind::Msgset,
+            StringSource::Dbgout => StringKind::Dbgout,
+            StringSource::Logset => StringKind::Logset,
+            StringSource::Voiceplay => StringKind::Voiceplay,
+        }
+    }
+
     pub fn subindex(&self) -> u32 {
         match *self {
             StringSource::Saveinfo => 0,
@@ -48,4 +64,12 @@ impl StringSource {
 #[derive(Debug)]
 pub enum StringArraySource {
     Select,
+}
+
+impl StringArraySource {
+    pub fn kind(&self) -> StringArrayKind {
+        match self {
+            StringArraySource::Select => StringArrayKind::SelectChoices,
+        }
+    }
 }

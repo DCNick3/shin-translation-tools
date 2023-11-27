@@ -11,12 +11,13 @@ use std::{
 
 use camino::Utf8PathBuf;
 use clap::{Parser, Subcommand};
+use shin_versions::ShinVersion;
 
 use crate::{
-    ctx::{Ctx, Version},
+    ctx::Ctx,
     reactor::{
         offset_validator::OffsetValidatorReactor,
-        rewrite::{CsvRewriter, RewriteReactor, XRewriter},
+        rewrite::{CsvRewriter, RewriteReactor},
         trace::{ConsoleTraceListener, CsvTraceListener, StringTraceReactor},
         Reactor,
     },
@@ -38,7 +39,7 @@ fn react_impl<R: Reactor>(ctx: &mut Ctx<R>) {
     }
 }
 
-fn react_with<R: Reactor>(reactor: &mut R, version: Version) {
+fn react_with<R: Reactor>(reactor: &mut R, version: ShinVersion) {
     let mut ctx = Ctx::new(reactor, version);
     react_impl(&mut ctx);
 }
@@ -46,7 +47,7 @@ fn react_with<R: Reactor>(reactor: &mut R, version: Version) {
 #[derive(Parser)]
 struct Cli {
     #[clap(value_enum)]
-    version: Version,
+    version: ShinVersion,
     snr_file: Utf8PathBuf,
     #[clap(subcommand)]
     command: Command,

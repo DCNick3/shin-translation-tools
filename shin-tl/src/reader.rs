@@ -54,6 +54,11 @@ impl<'a> Reader<'a> {
         let len = self.byte();
         self.take(len as usize)
     }
+    pub fn u16string_array(&mut self) -> &[u8] {
+        let len = self.short();
+        self.take(len as usize)
+    }
+
     pub fn msgid(&mut self) -> u32 {
         let data = self.take(3);
         u32::from_le_bytes([data[0], data[1], data[2], 0])
