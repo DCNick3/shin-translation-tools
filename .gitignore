@@ -1,3 +1,4 @@
 .idea
 /target
-main.snr
+*.csv
+*.snr
