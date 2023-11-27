@@ -40,16 +40,22 @@ Here's how it will look like:
 ```csv
 index,offset,source,source_subindex,s,translated
 <...>
-53,00037e62,saveinfo,0,共通ルート,
-54,00037e71,saveinfo,0,プロローグ,
-55,00037f15,msgset,1,@rここは自由に駆け回れる庭だった。,
-56,00037f3a,msgset,2,@r好きに生きることを許された世界だった。,
-57,00037f62,msgset,3,@rそれ以上に求めるものはない。,
-58,00037f82,msgset,4,@rやわらかい雪の上に、想うだけ足跡をつけたなら、この心は簡単に満たされる。,
+53,0x00037e62,saveinfo,0,共通ルート,
+54,0x00037e71,saveinfo,0,プロローグ,
+55,0x00037f15,msgset,1,@rここは自由に駆け回れる庭だった。,
+56,0x00037f3a,msgset,2,@r好きに生きることを許された世界だった。,
+57,0x00037f62,msgset,3,@rそれ以上に求めるものはない。,
+58,0x00037f82,msgset,4,@rやわらかい雪の上に、想うだけ足跡をつけたなら、この心は簡単に満たされる。,
 <...>
 ```
 
 The `index` column is used to later inject the translated strings back into the SNR file, while `offset`, `source` and `source_subindex` provide information about where the string comes from.
+
+If you are using a spreadsheet editor, take care to avoid conversion of the columns to numbers, as it will break the tool.
+
+In case of Google Spreadsheets, make sure to uncheck the "Convert text to numbers, dates and formulas" option when importing the csv:
+
+![](googledoc_import.png)
 
 ### Inject the translated strings back
 
