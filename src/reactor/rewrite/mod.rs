@@ -1,3 +1,6 @@
+mod csv_rewriter;
+mod x_rewriter;
+
 use std::{collections::HashMap, io};
 
 use bumpalo::{
@@ -5,6 +8,7 @@ use bumpalo::{
     Bump,
 };
 
+pub use self::{csv_rewriter::CsvRewriter, x_rewriter::XRewriter};
 use crate::{
     reactor::{Reactor, StringArraySource, StringSource},
     reader::Reader,
@@ -51,8 +55,9 @@ impl OffsetMap {
 
 pub trait Rewriter {
     fn rewrite_string<'bump>(
-        &mut self,
+        &self,
         bump: &'bump Bump,
+        instr_index: u32,
         instr_offset: u32,
         source: StringSource,
     ) -> Option<String<'bump>>;
@@ -60,25 +65,13 @@ pub trait Rewriter {
 
 impl Rewriter for () {
     fn rewrite_string<'bump>(
-        &mut self,
+        &self,
         _bump: &'bump Bump,
+        _instr_index: u32,
         _instr_offset: u32,
         _source: StringSource,
     ) -> Option<String<'bump>> {
         None
-    }
-}
-
-pub struct XRewriter;
-
-impl Rewriter for XRewriter {
-    fn rewrite_string<'bump>(
-        &mut self,
-        bump: &'bump Bump,
-        _instr_offset: u32,
-        _source: StringSource,
-    ) -> Option<String<'bump>> {
-        Some(String::from_str_in("X", bump))
     }
 }
 
@@ -157,6 +150,8 @@ impl<W: io::Write> RewriteMode for EmitMode<W> {
 
 pub struct RewriteReactor<'a, L, M> {
     reader: Reader<'a>,
+    current_instr_index: u32,
+    current_str_index: u32,
     current_instr_offset: u32,
     rewriter: L,
     mode: M,
@@ -168,6 +163,8 @@ impl<'a, R> RewriteReactor<'a, R, BuildOffsetMapMode> {
         let initial_in_position = reader.position();
         Self {
             reader,
+            current_instr_index: 0,
+            current_str_index: 0,
             current_instr_offset: 0,
             rewriter,
             mode: BuildOffsetMapMode {
@@ -183,6 +180,8 @@ impl<'a, R> RewriteReactor<'a, R, BuildOffsetMapMode> {
     pub fn into_emit<W>(self, writer: W) -> RewriteReactor<'a, R, EmitMode<W>> {
         RewriteReactor {
             reader: self.reader.rewind(self.mode.initial_in_position),
+            current_instr_index: 0,
+            current_str_index: 0,
             current_instr_offset: 0,
             rewriter: self.rewriter,
             mode: EmitMode {
@@ -220,15 +219,19 @@ impl<'a, R: Rewriter, M: RewriteMode> Reactor for RewriteReactor<'a, R, M> {
         // a poor's man Cow for bumpalo
         // implementing this a separate data type can reduce the amount of duplication
         let mut c = None;
-        let s = if let Some(s) =
-            self.rewriter
-                .rewrite_string(&self.bump, self.current_instr_offset, source)
-        {
+        let s = if let Some(s) = self.rewriter.rewrite_string(
+            &self.bump,
+            self.current_str_index,
+            self.current_instr_offset,
+            source,
+        ) {
             c = Some(encode_sjis_zstring(&self.bump, &s, fixup).unwrap());
             c.as_deref().unwrap()
         } else {
             s
         };
+
+        self.current_str_index += 1;
 
         self.mode.byte(s.len() as u8);
         self.mode.write(s);
@@ -239,15 +242,19 @@ impl<'a, R: Rewriter, M: RewriteMode> Reactor for RewriteReactor<'a, R, M> {
 
         // a poor's man Cow for bumpalo
         let mut c = None;
-        let s = if let Some(s) =
-            self.rewriter
-                .rewrite_string(&self.bump, self.current_instr_offset, source)
-        {
+        let s = if let Some(s) = self.rewriter.rewrite_string(
+            &self.bump,
+            self.current_str_index,
+            self.current_instr_offset,
+            source,
+        ) {
             c = Some(encode_sjis_zstring(&self.bump, &s, fixup).unwrap());
             c.as_deref().unwrap()
         } else {
             s
         };
+
+        self.current_str_index += 1;
 
         self.mode.short(s.len() as u16);
         self.mode.write(s);
@@ -267,6 +274,7 @@ impl<'a, R: Rewriter, M: RewriteMode> Reactor for RewriteReactor<'a, R, M> {
         for (i, s) in s.split(|&v| v == 0).enumerate() {
             if let Some(s) = self.rewriter.rewrite_string(
                 &self.bump,
+                self.current_str_index,
                 self.current_instr_offset,
                 source_maker(i as u32),
             ) {
@@ -280,6 +288,8 @@ impl<'a, R: Rewriter, M: RewriteMode> Reactor for RewriteReactor<'a, R, M> {
                 res.extend_from_slice(s);
                 res.push(0);
             }
+
+            self.current_str_index += 1;
         }
         res.push(0);
 
@@ -294,6 +304,10 @@ impl<'a, R: Rewriter, M: RewriteMode> Reactor for RewriteReactor<'a, R, M> {
     fn instr_start(&mut self) {
         self.current_instr_offset = self.reader.position();
         self.mode.instr_start(self.reader.position());
+    }
+
+    fn instr_end(&mut self) {
+        self.current_instr_index += 1;
     }
 
     fn has_instr(&self) -> bool {

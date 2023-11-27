@@ -95,6 +95,7 @@ impl<'a, L: StringTraceListener> Reactor for StringTraceReactor<'a, L> {
         self.bump.reset();
         self.current_instr_offset = self.reader.position();
     }
+    fn instr_end(&mut self) {}
 
     fn has_instr(&self) -> bool {
         self.reader.has_instr()

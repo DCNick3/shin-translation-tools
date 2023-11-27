@@ -8,13 +8,13 @@ use crate::reactor::{trace::StringTraceListener, StringSource};
 
 pub struct CsvTraceListener<W: io::Write> {
     writer: csv::Writer<W>,
-    record_idx: usize,
+    record_idx: u32,
 }
 
 // NOTE: serialization is kind of hard with bumpalo
 // #[derive(Serialize)]
 struct Record<'bump> {
-    index: usize,
+    index: u32,
     offset: u32,
     source: StringSource,
     s: String<'bump>,

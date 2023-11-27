@@ -11,14 +11,14 @@ use std::{
 
 use camino::Utf8PathBuf;
 use clap::{Parser, Subcommand};
-use ctx::{Ctx, Version};
-use reactor::Reactor;
 
 use crate::{
+    ctx::{Ctx, Version},
     reactor::{
         offset_validator::OffsetValidatorReactor,
-        rewrite::{RewriteReactor, XRewriter},
+        rewrite::{CsvRewriter, RewriteReactor, XRewriter},
         trace::{ConsoleTraceListener, CsvTraceListener, StringTraceReactor},
+        Reactor,
     },
     reader::Reader,
 };
@@ -34,7 +34,7 @@ fn react_impl<R: Reactor>(ctx: &mut Ctx<R>) {
             );
         };
         instruction::react_instr(ctx, instr);
-        // TODO: exit condition
+        ctx.instr_end();
     }
 }
 
@@ -109,6 +109,10 @@ fn main() {
             translations,
             output,
         } => {
+            let translations =
+                csv::Reader::from_path(translations).expect("Opening the CSV file failed");
+            let rewriter = CsvRewriter::new(translations);
+
             let output = File::create(output).expect("Opening the output file failed");
             let mut output = BufWriter::new(output);
             // write the headers that are before the code
@@ -117,7 +121,7 @@ fn main() {
                 .write_all(&snr_file[0..code_offset as usize])
                 .expect("Writing to the output file failed");
 
-            let mut reactor = RewriteReactor::new(reader, XRewriter, code_offset);
+            let mut reactor = RewriteReactor::new(reader, rewriter, code_offset);
             react_with(&mut reactor, version);
 
             let mut reactor = reactor.into_emit(&mut output);

@@ -13,13 +13,14 @@ pub trait Reactor {
     fn msgid(&mut self) -> u32;
 
     fn instr_start(&mut self);
+    fn instr_end(&mut self);
 
     fn has_instr(&self) -> bool;
 
     fn debug_loc(&self) -> String;
 }
 
-#[derive(Debug, Copy, Clone)]
+#[derive(Debug, Copy, Clone, Eq, PartialEq)]
 pub enum StringSource {
     Saveinfo,
     Select,

@@ -90,6 +90,9 @@ impl<'r, R: Reactor> Ctx<'r, R> {
     pub fn instr_start(&mut self) {
         self.reactor.instr_start()
     }
+    pub fn instr_end(&mut self) {
+        self.reactor.instr_end()
+    }
     pub fn has_instr(&self) -> bool {
         self.reactor.has_instr()
     }

@@ -60,6 +60,7 @@ impl<'a> Reactor for OffsetValidatorReactor<'a> {
     fn instr_start(&mut self) {
         self.instruction_offsets.insert(self.reader.position());
     }
+    fn instr_end(&mut self) {}
 
     fn has_instr(&self) -> bool {
         self.reader.has_instr()
