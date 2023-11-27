@@ -49,7 +49,7 @@ impl<'bump> Serialize for Record<'bump> {
         let mut s = serializer.serialize_struct("Record", 6)?;
         s.serialize_field("index", &self.index)?;
 
-        write!(buf, "{:08x}", self.offset).unwrap();
+        write!(buf, "0x{:08x}", self.offset).unwrap();
         debug_assert!(std::str::from_utf8(buf.as_ref()).is_ok());
         let offset = unsafe { std::str::from_utf8_unchecked(buf.as_ref()) };
 

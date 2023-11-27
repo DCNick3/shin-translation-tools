@@ -30,7 +30,7 @@ fn deser_hex<'de, D: serde::Deserializer<'de>>(deser: D) -> Result<u32, D::Error
         where
             E: de::Error,
         {
-            u32::from_str_radix(v, 16).map_err(de::Error::custom)
+            u32::from_str_radix(v.strip_prefix("0x").unwrap_or(v), 16).map_err(de::Error::custom)
         }
     }
     deser.deserialize_str(HexVisitor)
