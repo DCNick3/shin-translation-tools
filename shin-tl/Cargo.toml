@@ -2,6 +2,9 @@
 name = "shin-tl"
 version = "0.1.0"
 edition = "2021"
+repository = "https://github.com/DCNick3/shin-translation-tools"
+license = "MPL-2"
+description = "A tool to help translate strings within shin's SNR files."
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
