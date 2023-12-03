@@ -3,10 +3,14 @@
 //! (copied from shin: https://github.com/DCNick3/shin/blob/master/shin-core/src/format/text/mod.rs)
 // Maybe it should be polished and made into a separate library?
 
+pub mod cow;
+
 use std::{collections::HashMap, io};
 
 use bumpalo::Bump;
 use once_cell::sync::Lazy;
+
+pub use self::cow::Cow;
 
 include!("decode_tables.rs");
 include!("encode_tables.rs");

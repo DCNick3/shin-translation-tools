@@ -18,4 +18,4 @@ serde = { version = "1.0.193", features = ["derive"] }
 csv = "1.3.0"
 smallvec = { version = "2.0.0-alpha.1", features = ["write"] }
 clap = { workspace = true, features = ["derive"] }
-camino = "1.1.6"
+camino = { workspace = true }

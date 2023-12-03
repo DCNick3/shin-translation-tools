@@ -4,6 +4,8 @@
 
 // TODO: maybe generate this from a yaml file or whatnot
 
+use arrayref::array_ref;
+
 /// A version of the shin engine. It uniquely identifies all the file format versions, VM opcode numbers, etc.
 ///
 /// The names of enum variants are based on the developer/publisher's naming scheme.
@@ -107,8 +109,10 @@ impl ShinVersion {
     }
 }
 
+#[derive(Debug, Copy, Clone, Ord, PartialOrd, Eq, PartialEq)]
+#[cfg_attr(feature = "clap", derive(clap::ValueEnum))]
 pub enum RomVersion {
-    // those are based on the magic byte ('ROM ' vs 'ROM2') and the version number
+    // those names are based on the magic byte ('ROM ' vs 'ROM2') and the version number
     RomV2_1,
     Rom2V0_1,
     Rom2V1_1,
@@ -120,10 +124,20 @@ pub enum RomEncoding {
 }
 
 impl RomVersion {
-    pub fn detect(head_bytes: &[u8; 8]) -> Option<Self> {
+    pub const HEAD_BYTES_SIZE: usize = 8;
+
+    pub fn detect(head_bytes: &[u8; Self::HEAD_BYTES_SIZE]) -> Self {
+        match Self::try_detect(head_bytes) {
+            Some(version) => version,
+            None => panic!("Unknown ROM version: {:?}", head_bytes),
+        }
+    }
+
+    pub fn try_detect(head_bytes: &[u8; Self::HEAD_BYTES_SIZE]) -> Option<Self> {
+        assert_eq!(Self::HEAD_BYTES_SIZE, 8);
         let h = head_bytes;
-        let magic = &[h[0], h[1], h[2], h[3]];
-        let version = u32::from_le_bytes([h[4], h[5], h[6], h[7]]);
+        let magic = array_ref![h, 0, 4];
+        let version = u32::from_le_bytes(*array_ref![h, 4, 4]);
 
         Some(match (magic, version) {
             (b"ROM ", 0x00020001) => RomVersion::RomV2_1,
@@ -131,6 +145,15 @@ impl RomVersion {
             (b"ROM2", 0x00010001) => RomVersion::Rom2V1_1,
             _ => return None,
         })
+    }
+
+    pub fn head_bytes(&self) -> [u8; Self::HEAD_BYTES_SIZE] {
+        use RomVersion::*;
+        match self {
+            RomV2_1 => *b"ROM \x01\x00\x02\x00",
+            Rom2V0_1 => *b"ROM2\x01\x00\x00\x00",
+            Rom2V1_1 => *b"ROM2\x01\x00\x01\x00",
+        }
     }
 
     pub fn encoding(&self) -> RomEncoding {

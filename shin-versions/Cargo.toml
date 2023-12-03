@@ -12,3 +12,4 @@ clap = [
 
 [dependencies]
 clap = { workspace = true, optional = true, features = ["derive"] }
+arrayref = "0.3.7"

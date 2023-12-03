@@ -6,6 +6,13 @@ edition = "2021"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-shin-versions = { path = "../shin-versions" }
+shin-versions = { path = "../shin-versions", features = ["clap"] }
+shin-text = { path = "../shin-text" }
 
-clap = "4.4.9"
+clap = { workspace = true, features = ["derive"]  }
+camino = { workspace = true }
+bumpalo = { workspace = true }
+binrw = "0.13.3"
+memmap2 = "0.9.0"
+arrayref = "0.3.7"
+proc-bitfield = "0.3.0"
