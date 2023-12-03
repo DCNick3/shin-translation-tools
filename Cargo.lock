@@ -199,7 +199,7 @@ dependencies = [
 
 [[package]]
 name = "shin-rom"
-version = "0.1.0"
+version = "0.3.0"
 dependencies = [
  "clap",
  "shin-versions",
@@ -207,7 +207,7 @@ dependencies = [
 
 [[package]]
 name = "shin-tl"
-version = "0.2.1"
+version = "0.3.0"
 dependencies = [
  "bumpalo",
  "camino",
@@ -221,7 +221,7 @@ dependencies = [
 
 [[package]]
 name = "shin-versions"
-version = "0.2.1"
+version = "0.3.0"
 dependencies = [
  "clap",
 ]
