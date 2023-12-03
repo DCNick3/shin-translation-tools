@@ -9,7 +9,7 @@ However, they target relatively modern versions of the engine (the former - swit
 
 The aim of this project is to provide tools that cover a wider range of versions.
 
-As a starting point I'm targeting the Astral Air version of the engine.
+As a starting point I'm targeting the "AstralAir no Shiroki Towa -White Eternity-" version of the engine.
 
 ## Tools
 

@@ -7,12 +7,12 @@ use bumpalo::{
     collections::{String, Vec},
     Bump,
 };
+use shin_text::encode_sjis_zstring;
 
 pub use self::{csv_rewriter::CsvRewriter, x_rewriter::XRewriter};
 use crate::{
     reactor::{Reactor, StringArraySource, StringSource},
     reader::Reader,
-    text::encode_sjis_zstring,
 };
 
 pub struct OffsetMapBuilder {

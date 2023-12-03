@@ -5,12 +5,12 @@ use bumpalo::{
     collections::{String, Vec},
     Bump,
 };
+use shin_text::decode_sjis_zstring;
 
 pub use self::{console::ConsoleTraceListener, csv::CsvTraceListener};
 use crate::{
     reactor::{Reactor, StringArraySource, StringSource},
     reader::Reader,
-    text::decode_sjis_zstring,
 };
 
 pub trait StringTraceListener {

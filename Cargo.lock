@@ -206,6 +206,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "shin-text"
+version = "0.3.0"
+dependencies = [
+ "bumpalo",
+ "once_cell",
+]
+
+[[package]]
 name = "shin-tl"
 version = "0.3.0"
 dependencies = [
@@ -215,6 +223,7 @@ dependencies = [
  "csv",
  "once_cell",
  "serde",
+ "shin-text",
  "shin-versions",
  "smallvec",
 ]

@@ -2,7 +2,6 @@ mod ctx;
 mod instruction;
 mod reactor;
 mod reader;
-mod text;
 
 use std::{
     fs::File,

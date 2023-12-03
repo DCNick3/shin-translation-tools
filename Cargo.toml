@@ -2,12 +2,14 @@
 resolver = "2"
 members = [
     "shin-versions",
+    "shin-text",
     "shin-tl",
     "shin-rom",
 ]
 
 [workspace.dependencies]
 clap = "4.4.8"
+bumpalo = "3.14.0"
 
 # Config for 'cargo dist'
 [workspace.metadata.dist]

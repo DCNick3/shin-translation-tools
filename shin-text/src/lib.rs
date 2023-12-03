@@ -1,4 +1,3 @@
-#![allow(dead_code)]
 //! Encoding and decoding of Shift-JIS variant used by the shin engine.
 //!
 //! (copied from shin: https://github.com/DCNick3/shin/blob/master/shin-core/src/format/text/mod.rs)
