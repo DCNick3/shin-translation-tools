@@ -3,6 +3,7 @@ resolver = "2"
 members = [
     "shin-versions",
     "shin-tl",
+    "shin-rom",
 ]
 
 [workspace.dependencies]

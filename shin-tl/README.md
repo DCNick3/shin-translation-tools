@@ -1,5 +1,5 @@
 
-Only supports PS Vita version of Astral Air (PCSG00901) for now. Support for other shin-based games is possible to add.
+Only supports PS Vita version of AstralAir no Shiroki Towa -White Eternity- (PCSG00901) for now. Support for other shin-based games is possible to add.
 
 ## Installation
 
@@ -31,7 +31,7 @@ To extract strings from the snr file into a csv file, use a command like this:
 shin-tl <engine-version> <main.snr> read <strings.csv>
 ```
 
-The engine version is the version of the engine used by the game. Only Astral Air is supported for now, so it should be `astral-air`.
+The engine version is the version of the engine used by the game. Only AstralAir no Shiroki Towa -White Eternity- is supported for now, so it should be `white-eternity`.
 
 The `strings.csv` file will contain the extracted strings. It can be edited with a spreadsheet editor like Excel or LibreOffice Calc.
 
@@ -71,10 +71,10 @@ This will read the translation csv, replace the strings in the snr file and writ
 
 ### Rebuild the rom files
 
-You then would need to put the translated file back into the rom. I am not aware of any tools that can produce files compatible with the Astral Air version of the engine. I will probably write one later.
+You then would need to put the translated file back into the rom. I am not aware of any tools that can produce files compatible with the White Eternity version of the engine. I will probably write one later.
 
 What works for now is to find the offset of the original `main.snr` file in the rom, and replace it with the translated `main_translated.snr` file and manually overwrite it in a hex editor. This won't work if the translated file is larger than the original one, so a proper tool should be made.
 
 Also, for the most games, it makes sense to patch the `patch.rom` file instead, as it is usually smaller, and it takes precedence over the `data.rom` file.
 
-In Astral Air there's no `patch.rom` file in the original distribution, but the engine will still load it if it's present.
+In White Eternity there's no `patch.rom` file in the original distribution, but the engine will still load it if it's present.

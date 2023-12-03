@@ -4,11 +4,20 @@
 
 // TODO: maybe generate this from a yaml file or whatnot
 
+/// A version of the shin engine. It uniquely identifies all the file format versions, VM opcode numbers, etc.
+///
+/// The names of enum variants are based on the developer/publisher's naming scheme.
+///
+/// For ENTERGRAM it's based on the URL of the game's page on their website, e.g. `https://www.entergram.co.jp/konosuba/` -> `Konosuba`
+///
+/// For Dramatic Create/FAVORITE it's based on the URL of the game's page on Dramatic Create's website, e.g. `https://dramaticcreate.com/WhiteEternity/` -> `WhiteEternity`
+///
+/// When referring to these versions in the CLI, use `kebab-case` (e.g. `white-eternity`).
 #[derive(Debug, Copy, Clone, Ord, PartialOrd, Eq, PartialEq)]
 #[cfg_attr(feature = "clap", derive(clap::ValueEnum))]
 pub enum ShinVersion {
     /// 2016-09-22 PSVita `PCSG00901`
-    AstralAir,
+    WhiteEternity,
     /// 2020-08-27 Switch `01004920105FC000`
     Konosuba,
 }
@@ -51,7 +60,7 @@ impl ShinVersion {
         use ShinVersion::*;
 
         match self {
-            AstralAir => Short,
+            WhiteEternity => Short,
             Konosuba => VarInt,
         }
     }
@@ -62,7 +71,7 @@ impl ShinVersion {
         use StringKind::*;
 
         let (length_size, fixup) = match self {
-            AstralAir => match kind {
+            WhiteEternity => match kind {
                 Saveinfo | SelectTitle | Dbgout | Voiceplay => (U8Length, false),
                 Msgset | Logset => (U16Length, true),
             },
@@ -78,12 +87,64 @@ impl ShinVersion {
         use StringArrayKind::*;
 
         let (length_size, fixup) = match self {
-            AstralAir => match kind {
+            WhiteEternity => match kind {
                 SelectChoices => (U8Length, true),
             },
             Konosuba => todo!(),
         };
 
         StringStyle { length_size, fixup }
+    }
+
+    pub fn rom_version(&self) -> Option<RomVersion> {
+        use RomVersion::*;
+        use ShinVersion::*;
+        Some(match self {
+            WhiteEternity => Rom2V0_1,
+            // konosuba doesn't store its assets in the rom, it just uses switch's romfs
+            Konosuba => return None,
+        })
+    }
+}
+
+pub enum RomVersion {
+    // those are based on the magic byte ('ROM ' vs 'ROM2') and the version number
+    RomV2_1,
+    Rom2V0_1,
+    Rom2V1_1,
+}
+
+pub enum RomEncoding {
+    Utf8,
+    ShiftJIS,
+}
+
+impl RomVersion {
+    pub fn detect(head_bytes: &[u8; 8]) -> Option<Self> {
+        let h = head_bytes;
+        let magic = &[h[0], h[1], h[2], h[3]];
+        let version = u32::from_le_bytes([h[4], h[5], h[6], h[7]]);
+
+        Some(match (magic, version) {
+            (b"ROM ", 0x00020001) => RomVersion::RomV2_1,
+            (b"ROM2", 0x00000001) => RomVersion::Rom2V0_1,
+            (b"ROM2", 0x00010001) => RomVersion::Rom2V1_1,
+            _ => return None,
+        })
+    }
+
+    pub fn encoding(&self) -> RomEncoding {
+        use RomEncoding::*;
+        use RomVersion::*;
+        match self {
+            // Either ShiftJIS or no CJK name support at all
+            // All the games I have use no non-ASCII characters in their names, so I can't tell
+            // Guessing ShiftJIS here to be more lenient, but no idea honestly
+            RomV2_1 => ShiftJIS,
+            // Definitely ShiftJIS, WhiteEternity has some ShiftJIS-encoded CJK characters
+            Rom2V0_1 => ShiftJIS,
+            // Definitely unicode, Gerokasu has some UTF-8-encoded CJK characters
+            Rom2V1_1 => Utf8,
+        }
     }
 }
