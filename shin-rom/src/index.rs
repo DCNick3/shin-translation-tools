@@ -6,12 +6,13 @@ use bumpalo::Bump;
 use proc_bitfield::bitfield;
 use shin_versions::{RomEncoding, RomVersion};
 
+pub const DIRECTORY_OFFSET_MULTIPLIER: usize = 0x10;
+
 pub struct DirectoryIterCtx<'rom> {
     pub bump: Bump,
     pub version: RomVersion,
     pub index_start_offset: usize,
     pub file_offset_multiplier: usize,
-    pub directory_offset_multiplier: usize,
     pub index: &'rom [u8],
     pub rom: &'rom [u8],
 }
@@ -28,7 +29,8 @@ impl<'rom, 'ctx> DirectoryIter<'rom, 'ctx> {
         start_offset: usize,
     ) -> DirectoryIter<'rom, 'ctx> {
         let count = u32::from_le_bytes(*array_ref![ctx.index, start_offset, 4]);
-        let cur = io::Cursor::new(&ctx.index[start_offset + 4..][..count as usize * 0xc]);
+        let cur =
+            io::Cursor::new(&ctx.index[start_offset + 4..][..count as usize * RawEntry::SIZE]);
 
         DirectoryIter {
             ctx,
@@ -46,7 +48,7 @@ impl<'rom, 'ctx> Iterator for DirectoryIter<'rom, 'ctx> {
             if self.cur.position() as usize >= self.cur.get_ref().len() {
                 return None;
             }
-            let entry = RawEntry::read_args(&mut self.cur, (self.ctx.version,)).unwrap();
+            let entry = RawEntry::read(&mut self.cur).unwrap();
             let name_offset = self.start_offset + entry.name_and_flags.name_offset() as usize;
             let name_len = self.ctx.index[name_offset..]
                 .iter()
@@ -70,7 +72,7 @@ impl<'rom, 'ctx> Iterator for DirectoryIter<'rom, 'ctx> {
             };
 
             let offset_multiplier = if entry.name_and_flags.is_directory() {
-                self.ctx.directory_offset_multiplier
+                DIRECTORY_OFFSET_MULTIPLIER
             } else {
                 self.ctx.file_offset_multiplier
             };
@@ -96,60 +98,28 @@ impl<'rom, 'ctx> Iterator for DirectoryIter<'rom, 'ctx> {
 
 bitfield! {
     #[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, BinRead, BinWrite)]
-    pub struct NameOffsetAndFlagsV1(pub u32) : Debug {
-        pub name_offset: u32 @ 0..24,
-        pub is_directory: bool @ 31,
-        // there are some other flags, maybe we care about them?
-    }
-}
-
-bitfield! {
-    #[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, BinRead, BinWrite)]
-    pub struct NameOffsetAndFlagsV2(pub u32) : Debug {
+    pub struct NameOffsetAndFlags(pub u32) : Debug {
         pub name_offset: u32 @ 0..31,
         pub is_directory: bool @ 31,
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, BinRead, BinWrite)]
-#[br(import(version: RomVersion))]
-enum NameOffsetAndFlags {
-    #[br(pre_assert(version == RomVersion::Rom1V2_1))]
-    V1(NameOffsetAndFlagsV1),
-    #[br(pre_assert(version == RomVersion::Rom2V0_1 || version == RomVersion::Rom2V1_1))]
-    V2(NameOffsetAndFlagsV2),
-}
-
-impl NameOffsetAndFlags {
-    pub fn name_offset(&self) -> u32 {
-        match self {
-            NameOffsetAndFlags::V1(v) => v.name_offset(),
-            NameOffsetAndFlags::V2(v) => v.name_offset(),
-        }
-    }
-
-    pub fn is_directory(&self) -> bool {
-        match self {
-            NameOffsetAndFlags::V1(v) => v.is_directory(),
-            NameOffsetAndFlags::V2(v) => v.is_directory(),
-        }
-    }
-}
-
 #[derive(BinRead, BinWrite, Debug)]
-#[br(import(version: RomVersion))]
 #[brw(little)]
-struct RawEntry {
+pub struct RawEntry {
     // name offset is from the beginning of the entry
-    #[br(args(version))]
     pub name_and_flags: NameOffsetAndFlags,
     // data offset is from from the beginning of the archive file
     pub data_offset: u32,
     pub data_size: u32,
 }
 
+impl RawEntry {
+    pub const SIZE: usize = 0xc;
+}
+
 pub struct Entry<'rom, 'bump> {
-    pub name: shin_text::Cow<'bump, 'rom>,
+    pub name: shin_text::Cow<'bump, 'rom, str>,
     pub content: EntryContent<'rom, 'bump>,
 }
 

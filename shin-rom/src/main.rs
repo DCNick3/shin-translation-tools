@@ -4,6 +4,7 @@
 compile_error!("shin-rom only supports 64-bit targets");
 
 mod actions;
+mod create;
 mod header;
 mod index;
 mod progress;
@@ -16,6 +17,7 @@ use crate::index::{DirectoryIter, DirectoryIterCtx, EntryContent};
 #[derive(Parser)]
 enum Command {
     Extract(actions::Extract),
+    Create(actions::Create),
 }
 
 // this could be made into a proper iterator, but:
@@ -44,5 +46,6 @@ pub fn iter_rom<F: FnMut(&str, &EntryContent)>(ctx: &DirectoryIterCtx, mut f: F)
 fn main() {
     match Command::parse() {
         Command::Extract(action) => action.run(),
+        Command::Create(action) => action.run(),
     }
 }

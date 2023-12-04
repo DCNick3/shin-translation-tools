@@ -149,7 +149,7 @@ fn map_char_to_sjis(c: char) -> Option<u16> {
 }
 
 /// Calculate the size of a string in Shift-JIS
-pub fn measure_sjis_zstring(s: &str) -> io::Result<usize> {
+pub fn measure_sjis_string(s: &str) -> io::Result<usize> {
     let mut result = 0;
 
     for c in s.chars() {
@@ -174,14 +174,17 @@ pub fn measure_sjis_zstring(s: &str) -> io::Result<usize> {
             _ => unreachable!(),
         }
     }
-    // NUL terminator
-    result += 1;
 
     Ok(result)
 }
 
-/// Encode a string in Shift-JIS
-pub fn encode_sjis_zstring<'bump>(
+pub fn measure_sjis_zstring(s: &str) -> io::Result<usize> {
+    let mut result = measure_sjis_string(s)?;
+    result += 1;
+    Ok(result)
+}
+
+pub fn encode_sjis_string<'bump>(
     bump: &'bump Bump,
     s: &str,
     fixup: bool,
@@ -221,6 +224,17 @@ pub fn encode_sjis_zstring<'bump>(
             _ => unreachable!(),
         }
     }
+
+    Ok(output)
+}
+
+/// Encode a string in Shift-JIS
+pub fn encode_sjis_zstring<'bump>(
+    bump: &'bump Bump,
+    s: &str,
+    fixup: bool,
+) -> io::Result<bumpalo::collections::Vec<'bump, u8>> {
+    let mut output = encode_sjis_string(bump, s, fixup)?;
 
     output.push(0);
 

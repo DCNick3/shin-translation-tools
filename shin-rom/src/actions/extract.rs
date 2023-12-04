@@ -68,7 +68,6 @@ impl Extract {
             version,
             index_start_offset: cursor.position() as usize,
             file_offset_multiplier: header.file_offset_multiplier(),
-            directory_offset_multiplier: 16,
             index,
             rom,
         };

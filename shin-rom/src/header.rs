@@ -10,6 +10,7 @@ pub struct RomHeaderV1 {
 }
 
 impl RomHeaderV1 {
+    pub const SIZE: usize = 0x8;
     pub const DEFAULT_FILE_OFFSET_MULTIPLIER: usize = 0x800;
 }
 
@@ -21,6 +22,7 @@ pub struct RomHeaderV2 {
 }
 
 impl RomHeaderV2 {
+    pub const SIZE: usize = 0x18;
     pub const DEFAULT_FILE_OFFSET_MULTIPLIER: usize = 0x200;
 }
 
@@ -39,6 +41,15 @@ impl RomHeader {
         match self {
             RomHeader::V1(h) => h.index_size as usize,
             RomHeader::V2(h) => h.index_size as usize,
+        }
+    }
+
+    pub fn default_file_offset_multiplier(version: RomVersion) -> usize {
+        match version {
+            RomVersion::Rom1V2_1 => RomHeaderV1::DEFAULT_FILE_OFFSET_MULTIPLIER,
+            RomVersion::Rom2V0_1 | RomVersion::Rom2V1_1 => {
+                RomHeaderV2::DEFAULT_FILE_OFFSET_MULTIPLIER
+            }
         }
     }
 
