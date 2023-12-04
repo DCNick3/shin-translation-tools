@@ -112,12 +112,15 @@ impl ShinVersion {
 #[derive(Debug, Copy, Clone, Ord, PartialOrd, Eq, PartialEq)]
 #[cfg_attr(feature = "clap", derive(clap::ValueEnum))]
 pub enum RomVersion {
-    // those names are based on the magic byte ('ROM ' vs 'ROM2') and the version number
-    RomV2_1,
+    /// 'ROM ' magic, version 0x00020001
+    Rom1V2_1,
+    /// 'ROM2' magic, version 0x00000001
     Rom2V0_1,
+    /// 'ROM2' magic, version 0x00010001
     Rom2V1_1,
 }
 
+#[derive(Debug, Copy, Clone, Ord, PartialOrd, Eq, PartialEq)]
 pub enum RomEncoding {
     Utf8,
     ShiftJIS,
@@ -140,7 +143,7 @@ impl RomVersion {
         let version = u32::from_le_bytes(*array_ref![h, 4, 4]);
 
         Some(match (magic, version) {
-            (b"ROM ", 0x00020001) => RomVersion::RomV2_1,
+            (b"ROM ", 0x00020001) => RomVersion::Rom1V2_1,
             (b"ROM2", 0x00000001) => RomVersion::Rom2V0_1,
             (b"ROM2", 0x00010001) => RomVersion::Rom2V1_1,
             _ => return None,
@@ -150,7 +153,7 @@ impl RomVersion {
     pub fn head_bytes(&self) -> [u8; Self::HEAD_BYTES_SIZE] {
         use RomVersion::*;
         match self {
-            RomV2_1 => *b"ROM \x01\x00\x02\x00",
+            Rom1V2_1 => *b"ROM \x01\x00\x02\x00",
             Rom2V0_1 => *b"ROM2\x01\x00\x00\x00",
             Rom2V1_1 => *b"ROM2\x01\x00\x01\x00",
         }
@@ -163,7 +166,7 @@ impl RomVersion {
             // Either ShiftJIS or no CJK name support at all
             // All the games I have use no non-ASCII characters in their names, so I can't tell
             // Guessing ShiftJIS here to be more lenient, but no idea honestly
-            RomV2_1 => ShiftJIS,
+            Rom1V2_1 => ShiftJIS,
             // Definitely ShiftJIS, WhiteEternity has some ShiftJIS-encoded CJK characters
             Rom2V0_1 => ShiftJIS,
             // Definitely unicode, Gerokasu has some UTF-8-encoded CJK characters

@@ -1,4 +1,4 @@
-use std::fmt::Display;
+use std::{fmt::Display, ops::Deref};
 
 pub enum Cow<'bump, 's> {
     Borrowed(&'s str),
@@ -28,6 +28,14 @@ impl<'bump> From<bumpalo::collections::String<'bump>> for Cow<'bump, '_> {
 
 impl AsRef<str> for Cow<'_, '_> {
     fn as_ref(&self) -> &str {
+        self.as_str()
+    }
+}
+
+impl Deref for Cow<'_, '_> {
+    type Target = str;
+
+    fn deref(&self) -> &Self::Target {
         self.as_str()
     }
 }

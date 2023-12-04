@@ -28,7 +28,7 @@ impl RomHeaderV2 {
 #[brw(little)]
 #[br(import(version: RomVersion))]
 pub enum RomHeader {
-    #[br(pre_assert(version == RomVersion::RomV2_1))]
+    #[br(pre_assert(version == RomVersion::Rom1V2_1))]
     V1(RomHeaderV1),
     #[br(pre_assert(version == RomVersion::Rom2V0_1 || version == RomVersion::Rom2V1_1))]
     V2(RomHeaderV2),
