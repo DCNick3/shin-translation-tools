@@ -48,7 +48,7 @@ The `main.snr` is the file containing the game script and is the one of the main
 To extract strings from the snr file into a csv file, use a command like this: 
 
 ```bash
-shin-tl read <engine-version> <main.snr> <strings.csv>
+shin-tl snr read <engine-version> <main.snr> <strings.csv>
 ```
 
 The engine version is the version of the engine used by the game. Only AstralAir no Shiroki Towa -White Eternity- is supported for now, so it should be `white-eternity`.
@@ -84,7 +84,7 @@ Create a translation csv by either putting your translation into the `translated
 To inject the translated strings back into the snr file, use a command like this:
 
 ```bash
-shin-tl rewrite <engine-version> <main.snr> <translation.csv> <main_translated.snr>
+shin-tl snr rewrite <engine-version> <main.snr> <translation.csv> <main_translated.snr>
 ```
 
 This will read the translation csv, replace the strings in the snr file and write the result to `main_translated.snr`.

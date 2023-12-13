@@ -490,8 +490,6 @@ dependencies = [
  "bumpalo",
  "bytesize",
  "camino",
- "clap",
- "clap_complete",
  "indicatif",
  "itertools",
  "memmap2",
@@ -500,7 +498,21 @@ dependencies = [
  "shin-versions",
  "tracing",
  "tracing-indicatif",
- "tracing-subscriber",
+]
+
+[[package]]
+name = "shin-snr"
+version = "0.1.0"
+dependencies = [
+ "bumpalo",
+ "camino",
+ "csv",
+ "once_cell",
+ "serde",
+ "shin-text",
+ "shin-versions",
+ "smallvec 2.0.0-alpha.1",
+ "tracing",
 ]
 
 [[package]]
@@ -522,9 +534,14 @@ dependencies = [
  "csv",
  "once_cell",
  "serde",
+ "shin-rom",
+ "shin-snr",
  "shin-text",
  "shin-versions",
  "smallvec 2.0.0-alpha.1",
+ "tracing",
+ "tracing-indicatif",
+ "tracing-subscriber",
 ]
 
 [[package]]

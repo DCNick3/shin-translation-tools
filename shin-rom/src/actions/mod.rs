@@ -1,5 +1,5 @@
 mod create;
 mod extract;
 
-pub use create::Create;
-pub use extract::Extract;
+pub use create::rom_create;
+pub use extract::rom_extract;

@@ -3,8 +3,9 @@ resolver = "2"
 members = [
     "shin-versions",
     "shin-text",
-    "shin-tl",
     "shin-rom",
+    "shin-snr",
+    "shin-tl",
 ]
 
 [workspace.package]

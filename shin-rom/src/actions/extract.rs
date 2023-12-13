@@ -3,7 +3,6 @@ use std::{fs::File, io::Read as _};
 use binrw::BinRead as _;
 use bumpalo::Bump;
 use camino::Utf8PathBuf;
-use clap::Parser;
 use memmap2::Advice;
 use shin_versions::{RomEncoding, RomVersion};
 use tracing::info;
@@ -12,111 +11,90 @@ use crate::{
     header::RomHeader,
     index::{self, DirectoryIterCtx, EntryContent},
     progress::{ProgressAction, RomProgress, RomTimingSummary},
-    version::RomVersionSpecifier,
 };
 
-/// Extract all files from a rom.
-#[derive(Parser)]
-pub struct Extract {
-    /// The path to the rom to extract.
-    rom_path: Utf8PathBuf,
-    /// The path to the directory to extract to.
-    output_path: Utf8PathBuf,
-    /// Specify the version of the rom format to use. Will be detected automatically if not specified.
-    #[clap(short, long, value_parser = RomVersionSpecifier::parser())]
-    rom_version: Option<RomVersionSpecifier>,
-}
+pub fn rom_extract(rom_path: Utf8PathBuf, output_path: Utf8PathBuf, version: Option<RomVersion>) {
+    info!("Extracting {:?} to {:?}", rom_path, output_path);
 
-impl Extract {
-    pub fn run(self) {
-        let Extract {
-            rom_path,
-            output_path,
-            rom_version: version,
-        } = self;
-        info!("Extracting {:?} to {:?}", rom_path, output_path);
+    let timing_summary = RomTimingSummary::new(ProgressAction::Extract);
 
-        let timing_summary = RomTimingSummary::new(ProgressAction::Extract);
+    let rom_file = File::open(&rom_path).expect("Failed to open rom file");
+    let rom_file = unsafe { memmap2::Mmap::map(&rom_file) }.expect("Failed to mmap rom file");
 
-        let version = version.map(|v| v.rom_version());
-        let rom_file = File::open(&rom_path).expect("Failed to open rom file");
-        let rom_file = unsafe { memmap2::Mmap::map(&rom_file) }.expect("Failed to mmap rom file");
+    let rom = rom_file.as_ref();
+    let mut cursor = std::io::Cursor::new(&rom);
 
-        let rom = rom_file.as_ref();
-        let mut cursor = std::io::Cursor::new(&rom);
+    let mut head_bytes = [0; RomVersion::HEAD_BYTES_SIZE];
+    cursor.read_exact(&mut head_bytes).unwrap();
 
-        let mut head_bytes = [0; RomVersion::HEAD_BYTES_SIZE];
-        cursor.read_exact(&mut head_bytes).unwrap();
+    let version = version.unwrap_or_else(|| RomVersion::detect(&head_bytes));
+    info!("Extracting ROM as {:?}", version);
 
-        let version = version.unwrap_or_else(|| RomVersion::detect(&head_bytes));
-        info!("Extracting ROM as {:?}", version);
+    let header = RomHeader::read_args(&mut cursor, (version,)).unwrap();
+    info!("Header: {:x?}", header);
 
-        let header = RomHeader::read_args(&mut cursor, (version,)).unwrap();
-        info!("Header: {:x?}", header);
+    #[cfg(unix)]
+    rom_file
+        .advise_range(
+            Advice::WillNeed,
+            cursor.position() as usize,
+            header.index_size(),
+        )
+        .expect("Failed to advise rom index");
 
-        #[cfg(unix)]
-        rom_file
-            .advise_range(
-                Advice::WillNeed,
-                cursor.position() as usize,
-                header.index_size(),
-            )
-            .expect("Failed to advise rom index");
+    let index = &rom[cursor.position() as usize..][..header.index_size()];
 
-        let index = &rom[cursor.position() as usize..][..header.index_size()];
+    let ctx = DirectoryIterCtx {
+        bump: Bump::new(),
+        version,
+        index_start_offset: cursor.position() as usize,
+        file_offset_multiplier: header.file_offset_multiplier(),
+        index,
+        rom,
+    };
 
-        let ctx = DirectoryIterCtx {
-            bump: Bump::new(),
-            version,
-            index_start_offset: cursor.position() as usize,
-            file_offset_multiplier: header.file_offset_multiplier(),
-            index,
-            rom,
-        };
+    let data_start = cursor.position() as usize + header.index_size();
 
-        let data_start = cursor.position() as usize + header.index_size();
+    // TODO: measure perf impact of this
+    #[cfg(unix)]
+    rom_file
+        .advise_range(Advice::WillNeed, data_start, rom.len() - data_start)
+        .expect("Failed to advise rom file");
 
-        // TODO: measure perf impact of this
-        #[cfg(unix)]
-        rom_file
-            .advise_range(Advice::WillNeed, data_start, rom.len() - data_start)
-            .expect("Failed to advise rom file");
+    std::fs::create_dir_all(&output_path).expect("Failed to create output directory");
 
-        std::fs::create_dir_all(&output_path).expect("Failed to create output directory");
+    // change the current directory so that we can allocate less
+    std::env::set_current_dir(&output_path).expect("Failed to set current directory");
 
-        // change the current directory so that we can allocate less
-        std::env::set_current_dir(&output_path).expect("Failed to set current directory");
+    // first, create all the directories
+    index::walk_rom(&ctx, |path, entry| match entry {
+        EntryContent::File(_) => {}
+        EntryContent::Directory(_) => {
+            if let Err(e) = std::fs::create_dir_all(path) {
+                panic!("Failed to create directory {:?}: {}", path, e)
+            }
+        }
+    });
 
-        // first, create all the directories
+    let total_counts = index::rom_count_total(&ctx);
+    {
+        let mut progress = RomProgress::new(total_counts);
+
         index::walk_rom(&ctx, |path, entry| match entry {
-            EntryContent::File(_) => {}
-            EntryContent::Directory(_) => {
-                if let Err(e) = std::fs::create_dir_all(path) {
-                    panic!("Failed to create directory {:?}: {}", path, e)
+            EntryContent::File(content) => {
+                progress.add_file(content.len() as u64);
+                if let Err(e) = std::fs::write(path, content) {
+                    panic!("Failed to write file {:?}: {}", path, e)
                 }
             }
+            EntryContent::Directory(_) => {}
         });
+    }
 
-        let total_counts = index::rom_count_total(&ctx);
-        {
-            let mut progress = RomProgress::new(total_counts);
+    timing_summary.finish(total_counts);
 
-            index::walk_rom(&ctx, |path, entry| match entry {
-                EntryContent::File(content) => {
-                    progress.add_file(content.len() as u64);
-                    if let Err(e) = std::fs::write(path, content) {
-                        panic!("Failed to write file {:?}: {}", path, e)
-                    }
-                }
-                EntryContent::Directory(_) => {}
-            });
-        }
-
-        timing_summary.finish(total_counts);
-
-        if version.encoding() != RomEncoding::Utf8 {
-            let used_memory = ctx.bump.allocated_bytes();
-            info!("Used string memory: {} bytes", used_memory);
-        }
+    if version.encoding() != RomEncoding::Utf8 {
+        let used_memory = ctx.bump.allocated_bytes();
+        info!("Used string memory: {} bytes", used_memory);
     }
 }
