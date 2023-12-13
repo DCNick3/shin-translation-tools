@@ -37,7 +37,7 @@ impl Create {
 
         let source_directory = {
             let _span = default_spinner_span!("Collecting input files");
-            InputDirectory::walk(&bump, &source_directory)
+            InputDirectory::walk(&bump, version.encoding(), &source_directory)
         };
 
         let allocated = {

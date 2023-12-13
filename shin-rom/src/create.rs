@@ -7,7 +7,7 @@ use bumpalo::{
 };
 use camino::{Utf8Path, Utf8PathBuf};
 use itertools::Itertools as _;
-use shin_text::{encode_sjis_zstring, measure_sjis_zstring};
+use shin_text::encode_sjis_string;
 use shin_versions::{RomDirectoryOffsetDisposition, RomEncoding, RomVersion};
 use tracing::{trace, warn};
 
@@ -26,6 +26,7 @@ trait DirVisitor<'bump, S> {
         &mut self,
         index: usize,
         name: &'bump str,
+        encoded_name: &'bump [u8],
         path_buf: &mut Utf8PathBuf,
         file: &InputFile<S>,
     ) {
@@ -34,6 +35,7 @@ trait DirVisitor<'bump, S> {
         &mut self,
         index: usize,
         name: &'bump str,
+        encoded_name: &'bump [u8],
         path_buf: &mut Utf8PathBuf,
         directory: &InputDirectory<'bump, S>,
     ) {
@@ -46,6 +48,7 @@ trait FsWalker<'bump, S> {
         &mut self,
         index: usize,
         name: &'bump str,
+        encoded_name: &'bump [u8],
         path_buf: &mut Utf8PathBuf,
         directory: &InputDirectory<'bump, S>,
     );
@@ -54,6 +57,7 @@ trait FsWalker<'bump, S> {
         &mut self,
         index: usize,
         name: &'bump str,
+        encoded_name: &'bump [u8],
         path_buf: &mut Utf8PathBuf,
         directory: &InputDirectory<'bump, S>,
     ) {
@@ -73,13 +77,14 @@ impl<'bump, S, DV: DirVisitor<'bump, S>> FsWalker<'bump, S> for DirVisitorAdapte
         &mut self,
         _index: usize,
         _name: &'bump str,
+        _encoded_name: &'bump [u8],
         path_buf: &mut Utf8PathBuf,
         directory: &InputDirectory<'bump, S>,
     ) {
         // special case: root directory
         if self.visit_root == true {
             self.visitor
-                .visit_directory(self.directory_index, "", path_buf, directory);
+                .visit_directory(self.directory_index, "", &[], path_buf, directory);
             self.directory_index += 1;
             self.visit_root = false;
         }
@@ -103,13 +108,14 @@ where
         directory_index: usize,
         directory_index_ctr: &mut usize,
         name: &'bump str,
+        encoded_name: &'bump [u8],
         path_buf: &mut Utf8PathBuf,
         visitor: &mut V,
     ) where
         V: FsWalker<'bump, S>,
     {
         // trace!("{:10} {}", directory_index, path_buf);
-        visitor.enter_directory(directory_index, name, path_buf, directory);
+        visitor.enter_directory(directory_index, name, encoded_name, path_buf, directory);
 
         // this index needs to be consistent with the index computed in `visit_directory`
 
@@ -134,11 +140,11 @@ where
         *directory_index_ctr += directory
             .0
             .iter()
-            .filter(|(_, e)| matches!(e, InputEntry::Directory(_)))
+            .filter(|(_, _, e)| matches!(e, InputEntry::Directory(_)))
             .count();
 
         // enter the subdirectories
-        for (name, entry) in &directory.0 {
+        for (name, encoded_name, entry) in &directory.0 {
             if let InputEntry::Directory(directory) = entry {
                 path_buf.push(name);
                 recur(
@@ -146,6 +152,7 @@ where
                     subdir_index,
                     directory_index_ctr,
                     name,
+                    encoded_name,
                     path_buf,
                     visitor,
                 );
@@ -153,10 +160,18 @@ where
                 path_buf.pop();
             }
         }
-        visitor.leave_directory(directory_index, name, path_buf, directory);
+        visitor.leave_directory(directory_index, name, encoded_name, path_buf, directory);
     }
 
-    recur(root, 0, &mut 1, "", &mut Utf8PathBuf::new(), &mut walker);
+    recur(
+        root,
+        0,
+        &mut 1,
+        "",
+        &[],
+        &mut Utf8PathBuf::new(),
+        &mut walker,
+    );
 
     walker
 }
@@ -168,15 +183,15 @@ fn visit_directory<'bump, S, V: DirVisitor<'bump, S>>(
     path_buf: &mut Utf8PathBuf,
     visitor: &mut V,
 ) {
-    for (name, entry) in &directory.0 {
+    for (name, encoded_name, entry) in &directory.0 {
         path_buf.push(name);
         match entry {
             InputEntry::Directory(directory) => {
-                visitor.visit_directory(*directory_index, name, path_buf, directory);
+                visitor.visit_directory(*directory_index, name, encoded_name, path_buf, directory);
                 *directory_index += 1;
             }
             InputEntry::File(file) => {
-                visitor.visit_file(*file_index, name, path_buf, file);
+                visitor.visit_file(*file_index, name, encoded_name, path_buf, file);
                 *file_index += 1;
             }
         }
@@ -206,12 +221,15 @@ pub enum InputEntry<'bump, S> {
     File(InputFile<S>),
 }
 
-pub struct InputDirectory<'bump, S>(pub Vec<'bump, (&'bump str, InputEntry<'bump, S>)>);
+pub struct InputDirectory<'bump, S>(
+    pub Vec<'bump, (&'bump str, &'bump [u8], InputEntry<'bump, S>)>,
+);
 
 impl<'bump, 'a> InputDirectory<'bump, BaseDirFileSource<'a>> {
-    pub fn walk(bump: &'bump Bump, base_dir: &'a Utf8Path) -> Self {
+    pub fn walk(bump: &'bump Bump, encoding: RomEncoding, base_dir: &'a Utf8Path) -> Self {
         fn recur<'bump, 'a>(
             bump: &'bump Bump,
+            encoding: RomEncoding,
             base_dir: &'a Utf8Path,
             path_buf: &mut Utf8PathBuf,
         ) -> InputDirectory<'bump, BaseDirFileSource<'a>> {
@@ -230,33 +248,39 @@ impl<'bump, 'a> InputDirectory<'bump, BaseDirFileSource<'a>> {
                 let file_name = v.file_name();
                 let file_name = file_name.to_str().expect("invalid utf8 in rom file");
 
-                result.push((
-                    String::from_str_in(file_name, bump).into_bump_str(),
-                    if ty.is_dir() {
-                        InputEntry::Directory({
-                            path_buf.push(file_name);
+                let name = String::from_str_in(file_name, bump).into_bump_str();
+                let encoded_name = match encoding {
+                    RomEncoding::Utf8 => name.as_bytes(),
+                    RomEncoding::ShiftJIS => encode_sjis_string(&bump, name, false)
+                        .expect("filename not encodable in Shift-JIS")
+                        .into_bump_slice(),
+                };
+                let entry = if ty.is_dir() {
+                    InputEntry::Directory({
+                        path_buf.push(file_name);
 
-                            let dir = recur(bump, base_dir, path_buf);
+                        let dir = recur(bump, encoding, base_dir, path_buf);
 
-                            path_buf.pop();
+                        path_buf.pop();
 
-                            dir
-                        })
-                    } else if ty.is_file() {
-                        InputEntry::File(InputFile(BaseDirFileSource { base_dir }))
-                    } else {
-                        unreachable!()
-                    },
-                ))
+                        dir
+                    })
+                } else if ty.is_file() {
+                    InputEntry::File(InputFile(BaseDirFileSource { base_dir }))
+                } else {
+                    unreachable!()
+                };
+
+                result.push((name, encoded_name, entry))
             }
 
-            result.sort_by(|(a, _), (b, _)| a.cmp(b));
+            result.sort_by(|(_, a, _), (_, b, _)| a.cmp(b));
 
             InputDirectory(result)
         }
 
         let mut s = base_dir.to_path_buf();
-        recur(bump, base_dir, &mut s)
+        recur(bump, encoding, base_dir, &mut s)
     }
 }
 
@@ -292,6 +316,7 @@ impl<'bump, S: FileSource> DirVisitor<'bump, S> for RomCounter {
         &mut self,
         _index: usize,
         _name: &'bump str,
+        _encoded_name: &'bump [u8],
         path_buf: &mut Utf8PathBuf,
         file: &InputFile<S>,
     ) {
@@ -314,6 +339,7 @@ impl<'bump, S> DirVisitor<'bump, S> for CountVisitor {
         &mut self,
         _file_index: usize,
         _name: &'bump str,
+        _encoded_name: &'bump [u8],
         _path: &mut Utf8PathBuf,
         _file: &InputFile<S>,
     ) {
@@ -324,6 +350,7 @@ impl<'bump, S> DirVisitor<'bump, S> for CountVisitor {
         &mut self,
         _directory_index: usize,
         _name: &'bump str,
+        _encoded_name: &'bump [u8],
         _path: &mut Utf8PathBuf,
         _directory: &InputDirectory<'bump, S>,
     ) {
@@ -354,7 +381,6 @@ impl Allocator {
 }
 
 struct AllocateDirectoryVisitor<'a, 'bump> {
-    rom_encoding: RomEncoding,
     allocator: &'a mut Allocator,
     directory_positions: Vec<'bump, (u64, u64)>,
 }
@@ -364,15 +390,18 @@ impl<'a, 'bump, S> FsWalker<'bump, S> for AllocateDirectoryVisitor<'a, 'bump> {
         &mut self,
         index: usize,
         _name: &'bump str,
+        _encoded_name: &'bump [u8],
         _path_buf: &mut Utf8PathBuf,
         directory: &InputDirectory<'bump, S>,
     ) {
+        // NOTE: this is WRONG
+        // the directories must be sorted in the ROM encoding, not in UTF-8
         assert!(
             directory
                 .0
                 .iter()
                 .tuple_windows()
-                .all(|((a, _), (b, _))| a < b),
+                .all(|((_, a, _), (_, b, _))| a < b),
             "directory entries must be sorted"
         );
 
@@ -388,14 +417,8 @@ impl<'a, 'bump, S> FsWalker<'bump, S> for AllocateDirectoryVisitor<'a, 'bump> {
         alloc.allocate(2); // "." entry file name
         alloc.allocate(3); // ".." entry file name
 
-        for (name, _) in &directory.0 {
-            let encoded_name_len = match self.rom_encoding {
-                RomEncoding::Utf8 => name.len() + 1,
-                RomEncoding::ShiftJIS => {
-                    measure_sjis_zstring(name).expect("filename not encodable in Shift-JIS")
-                }
-            };
-            alloc.allocate(encoded_name_len as u64);
+        for (_, encoded_name, _) in &directory.0 {
+            alloc.allocate(encoded_name.len() as u64 + 1);
         }
 
         let my_size = alloc.position - my_offset;
@@ -415,6 +438,7 @@ impl<'a, 'bump, S: FileSource> DirVisitor<'bump, S> for AllocateFileVisitor<'a, 
         &mut self,
         file_index: usize,
         _name: &'bump str,
+        _encoded_name: &'bump [u8],
         path: &mut Utf8PathBuf,
         file: &InputFile<S>,
     ) {
@@ -450,6 +474,7 @@ impl<'a, 'bump, S> DirVisitor<'bump, S> for GatherEntryParentsInnerVisitor<'a, '
         &mut self,
         _directory_index: usize,
         _name: &'bump str,
+        _encoded_name: &'bump [u8],
         _path: &mut Utf8PathBuf,
         _directory: &InputDirectory<'bump, S>,
     ) {
@@ -462,6 +487,7 @@ impl<'bump, S> FsWalker<'bump, S> for GatherEntryParents<'bump> {
         &mut self,
         index: usize,
         name: &'bump str,
+        encoded_name: &'bump [u8],
         path_buf: &mut Utf8PathBuf,
         directory: &InputDirectory<'bump, S>,
     ) {
@@ -472,7 +498,7 @@ impl<'bump, S> FsWalker<'bump, S> for GatherEntryParents<'bump> {
                 directory_parent_indices: &mut self.directory_parent_indices,
             };
             assert_eq!(index, 0);
-            visitor.visit_directory(0, name, path_buf, directory);
+            visitor.visit_directory(0, name, encoded_name, path_buf, directory);
             self.directory_index += 1;
         }
 
@@ -527,7 +553,6 @@ pub fn rom_allocate<'bump, S: FileSource>(
     let directory_positions = walk_input_fs(
         input,
         AllocateDirectoryVisitor {
-            rom_encoding: rom_version.encoding(),
             allocator: &mut allocator,
             directory_positions: Vec::from_iter_in(
                 std::iter::repeat((u64::MAX, u64::MAX)).take(directory_count),
@@ -615,7 +640,6 @@ impl<W: io::Write> WriteWrapper<W> {
 }
 
 struct WriteDirectoryInnerVisitor<'scratch, 'a, 'bump, W> {
-    rom_encoding: RomEncoding,
     directory_offset_disposition: RomDirectoryOffsetDisposition,
 
     index_offset: u64,
@@ -624,19 +648,20 @@ struct WriteDirectoryInnerVisitor<'scratch, 'a, 'bump, W> {
     file_positions: &'bump [(u64, u64)],
     writer: &'a mut WriteWrapper<W>,
     names_allocator: Allocator,
-    names: Vec<'scratch, &'bump str>,
+    names: Vec<'scratch, &'bump [u8]>,
 }
 impl<'scratch, 'a, 'bump, W: io::Write> WriteDirectoryInnerVisitor<'scratch, 'a, 'bump, W> {
-    fn emit_entry(&mut self, name: &'bump str, is_directory: bool, (mut offset, size): (u64, u64)) {
-        self.names.push(name);
+    fn emit_entry(
+        &mut self,
+        name: &'bump str,
+        encoded_name: &'bump [u8],
+        is_directory: bool,
+        (mut offset, size): (u64, u64),
+    ) {
+        self.names.push(encoded_name);
 
-        let name_size = match self.rom_encoding {
-            RomEncoding::Utf8 => name.len() + 1,
-            RomEncoding::ShiftJIS => {
-                measure_sjis_zstring(name).expect("filename not encodable in Shift-JIS")
-            }
-        };
-        let name_offset = self.names_allocator.allocate(name_size as u64);
+        let name_size = encoded_name.len() as u64 + 1;
+        let name_offset = self.names_allocator.allocate(name_size);
 
         let offset_multiplier = if is_directory {
             DIRECTORY_OFFSET_MULTIPLIER as u64
@@ -684,29 +709,30 @@ impl<'scratch, 'a, 'bump, W: io::Write, S> DirVisitor<'bump, S>
         &mut self,
         index: usize,
         name: &'bump str,
+        encoded_name: &'bump [u8],
         _path_buf: &mut Utf8PathBuf,
         _file: &InputFile<S>,
     ) {
         let file_position = self.file_positions[index];
-        self.emit_entry(name, false, file_position);
+        self.emit_entry(name, encoded_name, false, file_position);
     }
 
     fn visit_directory(
         &mut self,
         index: usize,
         name: &'bump str,
+        encoded_name: &'bump [u8],
         _path_buf: &mut Utf8PathBuf,
         _directory: &InputDirectory<'bump, S>,
     ) {
         let directory_position = self.directory_positions[index];
-        self.emit_entry(name, true, directory_position);
+        self.emit_entry(name, encoded_name, true, directory_position);
     }
 }
 
 struct WriteDirectoryWalker<'a, 'bump, W> {
     scratch_bump: Bump,
 
-    rom_encoding: RomEncoding,
     directory_offset_disposition: RomDirectoryOffsetDisposition,
 
     index_offset: u64,
@@ -729,6 +755,7 @@ where
         &mut self,
         index: usize,
         _name: &'bump str,
+        _encoded_name: &'bump [u8],
         _path: &mut Utf8PathBuf,
         directory: &InputDirectory<'bump, S>,
     ) {
@@ -757,7 +784,6 @@ where
         let names = Vec::with_capacity_in(entry_count, &self.scratch_bump);
 
         let mut visitor = WriteDirectoryInnerVisitor {
-            rom_encoding: self.rom_encoding,
             directory_offset_disposition: self.directory_offset_disposition,
 
             index_offset: self.index_offset,
@@ -770,10 +796,10 @@ where
         };
 
         // emit "." and ".." entries (they are always at the beginning)
-        visitor.emit_entry(".", true, current_directory_position);
+        visitor.emit_entry(".", b".", true, current_directory_position);
         let parent_index = self.directory_parent_indices[index];
         let parent_directory_position = self.directory_positions[parent_index];
-        visitor.emit_entry("..", true, parent_directory_position);
+        visitor.emit_entry("..", b"..", true, parent_directory_position);
 
         visit_directory(
             directory,
@@ -787,31 +813,9 @@ where
         for name in visitor.names {
             use io::Write;
 
-            match self.rom_encoding {
-                RomEncoding::Utf8 => {
-                    self.writer
-                        .write_all(name.as_bytes())
-                        .expect("Failed to write name");
-                    self.writer.write_all(&[0]).expect("Failed to write name");
-                }
-                RomEncoding::ShiftJIS => {
-                    let encoded = encode_sjis_zstring(&self.scratch_bump, name, false)
-                        .expect("filename not encodable in Shift-JIS");
-                    self.writer
-                        .write_all(&encoded)
-                        .expect("Failed to write name");
-                }
-            }
+            self.writer.write_all(name).expect("Failed to write name");
+            self.writer.write_all(&[0]).expect("Failed to write name");
         }
-    }
-
-    fn leave_directory(
-        &mut self,
-        _index: usize,
-        _name: &'bump str,
-        _path: &mut Utf8PathBuf,
-        _directory: &InputDirectory<'bump, S>,
-    ) {
     }
 }
 
@@ -829,6 +833,7 @@ impl<'a, 'bump, W: io::Write, S: FileSource> DirVisitor<'bump, S>
         &mut self,
         index: usize,
         _name: &'bump str,
+        _encoded_name: &'bump [u8],
         path_buf: &mut Utf8PathBuf,
         file: &InputFile<S>,
     ) {
@@ -906,7 +911,6 @@ pub fn rom_write<'bump, S: FileSource, W: io::Write>(
             WriteDirectoryWalker {
                 scratch_bump: Bump::new(),
 
-                rom_encoding: rom_version.encoding(),
                 directory_offset_disposition: rom_version.directory_offset_disposition(),
 
                 index_offset: allocated.index_offset,
