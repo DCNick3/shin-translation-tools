@@ -2,6 +2,11 @@
 name = "shin-rom"
 version = "0.3.0"
 edition = "2021"
+description = "A tool to extract an package .rom files used by shin engine"
+
+authors = { workspace = true }
+repository = { workspace = true }
+license = { workspace = true }
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 

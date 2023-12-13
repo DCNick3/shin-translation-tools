@@ -2,6 +2,11 @@
 name = "shin-text"
 version = "0.3.0"
 edition = "2021"
+description = "A library implementing the variant of Shift-JIS used by the shin engine"
+
+authors = { workspace = true }
+repository = { workspace = true }
+license = { workspace = true }
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 

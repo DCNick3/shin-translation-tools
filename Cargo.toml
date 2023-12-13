@@ -7,6 +7,11 @@ members = [
     "shin-rom",
 ]
 
+[workspace.package]
+authors = ["⭐NINIKA⭐️"]
+repository = "https://github.com/DCNick3/shin-translation-tools"
+license = "MPL-2"
+
 [workspace.dependencies]
 clap = "4.4.10"
 bumpalo = "3.14.0"
