@@ -3,7 +3,6 @@ use std::{fs::File, io::Read as _};
 use binrw::BinRead as _;
 use bumpalo::Bump;
 use camino::Utf8PathBuf;
-use memmap2::Advice;
 use shin_versions::{RomEncoding, RomVersion};
 use tracing::info;
 
@@ -36,7 +35,7 @@ pub fn rom_extract(rom_path: Utf8PathBuf, output_path: Utf8PathBuf, version: Opt
     #[cfg(unix)]
     rom_file
         .advise_range(
-            Advice::WillNeed,
+            memmap2::Advice::WillNeed,
             cursor.position() as usize,
             header.index_size(),
         )
@@ -58,7 +57,11 @@ pub fn rom_extract(rom_path: Utf8PathBuf, output_path: Utf8PathBuf, version: Opt
     // TODO: measure perf impact of this
     #[cfg(unix)]
     rom_file
-        .advise_range(Advice::WillNeed, data_start, rom.len() - data_start)
+        .advise_range(
+            memmap2::Advice::WillNeed,
+            data_start,
+            rom.len() - data_start,
+        )
         .expect("Failed to advise rom file");
 
     std::fs::create_dir_all(&output_path).expect("Failed to create output directory");
