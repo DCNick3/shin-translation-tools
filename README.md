@@ -20,7 +20,41 @@ As a starting point I'm targeting the "AstralAir no Shiroki Towa -White Eternity
 
 In the future I plan to implement more engine versions for the SNR translation tool, and maybe make a multi-version tool for working with graphics (PIC and TXA).
 
-## Workflow
+## Installation
+
+### Binary release
+
+Download a release from the [releases page](https://github.com/DCNick3/shin-translation-tools/releases).
+
+For Linux/macOS use the shell script installer. For Windows use either the powershell or msi installer.
+
+### From source
+
+```bash
+cargo install --path shin-tl
+```
+
+### Shell completion
+
+To enable shell completion, generate the completion script and source it in your shell
+
+For linux shells:
+
+```bash
+shin-tl generate-completion bash > ~/.local/share/bash-completion/completions/shin-tl
+shin-tl generate-completion zsh > ~/.local/share/zsh/site-functions/_shin-tl
+shin-tl generate-completion fish > ~/.config/fish/completions/shin-tl.fish
+```
+
+For powershell:
+
+```powershell
+shin-tl generate-completion powershell >> $PROFILE
+```
+
+Then re-start the shell or source the generated file
+
+## Usage
 
 ### Preparation
 
