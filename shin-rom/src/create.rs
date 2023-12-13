@@ -105,7 +105,7 @@ where
     ) where
         V: FsWalker<'bump, S>,
     {
-        eprintln!("{:10} {}", directory_index, path_buf);
+        // eprintln!("{:10} {}", directory_index, path_buf);
         visitor.enter_directory(directory_index, name, path_buf, directory);
 
         // this index needs to be consistent with the index computed in `visit_directory`
@@ -219,6 +219,7 @@ impl<'bump, 'a> InputDirectory<'bump, BaseDirFileSource<'a>> {
                 let v = v.expect("Failed reading directory for rom");
                 let ty = v.file_type().expect("Failed to get file type for rom");
                 if !ty.is_dir() && !ty.is_file() {
+                    // TODO: resolve symlinks?
                     eprintln!("Skipping non-file, non-directory {:?}", v.path());
                     continue;
                 }
@@ -383,51 +384,6 @@ impl<'a, 'bump, S> FsWalker<'bump, S> for AllocateDirectoryVisitor<'a, 'bump> {
         self.directory_positions[index] = (my_offset, my_size);
     }
 }
-
-// impl<'a, 'bump, S> DirVisitor<'bump, S> for AllocateDirectoryVisitor<'a, 'bump> {
-//     fn visit_directory(
-//         &mut self,
-//         _directory_index: usize,
-//         _name: &'bump str,
-//         _path: &mut Utf8PathBuf,
-//         directory: &InputDirectory<'bump, S>,
-//     ) {
-//         assert!(
-//             directory
-//                 .0
-//                 .iter()
-//                 .tuple_windows()
-//                 .all(|((a, _), (b, _))| a < b),
-//             "directory entries must be sorted"
-//         );
-//
-//         let alloc = &mut self.allocator;
-//
-//         alloc.align(DIRECTORY_OFFSET_MULTIPLIER as u64);
-//
-//         let entries_count = directory.0.len() + 2; // 2 for "." and ".."
-//         let entries_size = entries_count * RawEntry::SIZE;
-//
-//         let my_offset = alloc.allocate(4 + entries_size as u64);
-//
-//         alloc.allocate(2); // "." entry file name
-//         alloc.allocate(3); // ".." entry file name
-//
-//         for (name, _) in &directory.0 {
-//             let encoded_name_len = match self.rom_encoding {
-//                 RomEncoding::Utf8 => name.len() + 1,
-//                 RomEncoding::ShiftJIS => {
-//                     measure_sjis_zstring(name).expect("filename not encodable in Shift-JIS")
-//                 }
-//             };
-//             alloc.allocate(encoded_name_len as u64);
-//         }
-//
-//         let my_size = alloc.position - my_offset;
-//
-//         self.directory_positions.push((my_offset, my_size));
-//     }
-// }
 
 struct AllocateFileVisitor<'a, 'bump> {
     allocator: &'a mut Allocator,
@@ -674,10 +630,10 @@ impl<'scratch, 'a, 'bump, W: io::Write> WriteDirectoryInnerVisitor<'scratch, 'a,
             .expect("rom offset too large");
         let data_size = size.try_into().expect("file too large");
 
-        eprintln!(
-            "{offset:#018x} {:#010x} {data_offset:#010x} {data_size:#010x} {name:24}",
-            name_and_flags.0
-        );
+        // eprintln!(
+        //     "{offset:#018x} {:#010x} {data_offset:#010x} {data_size:#010x} {name:24}",
+        //     name_and_flags.0
+        // );
 
         let entry = RawEntry {
             name_and_flags,
@@ -821,6 +777,43 @@ where
     }
 }
 
+struct WriteFileVisitor<'a, 'bump, W> {
+    file_offset_multiplier: u64,
+    file_positions: &'bump [(u64, u64)],
+    writer: &'a mut WriteWrapper<W>,
+}
+
+impl<'a, 'bump, W: io::Write, S: FileSource> DirVisitor<'bump, S>
+    for WriteFileVisitor<'a, 'bump, W>
+{
+    fn visit_file(
+        &mut self,
+        index: usize,
+        _name: &'bump str,
+        path_buf: &mut Utf8PathBuf,
+        file: &InputFile<S>,
+    ) {
+        let (offset, size) = self.file_positions[index];
+        self.writer.align(self.file_offset_multiplier).unwrap();
+
+        assert_eq!(offset, self.writer.offset);
+
+        let mut stream = file
+            .0
+            .open(path_buf.as_str())
+            .unwrap_or_else(|e| panic!("Failed to open file {:?}: {:?}", path_buf, e));
+        std::io::copy(&mut stream, &mut self.writer)
+            .unwrap_or_else(|e| panic!("Failed to copy file {:?} to rom: {:?}", path_buf, e));
+
+        assert_eq!(
+            size,
+            self.writer.offset - offset,
+            "File size mismatch for {:?}, did it change during the rom build?",
+            path_buf
+        );
+    }
+}
+
 pub fn rom_write<'bump, S: FileSource, W: io::Write>(
     rom_version: RomVersion,
     input: &InputDirectory<'bump, S>,
@@ -876,9 +869,19 @@ pub fn rom_write<'bump, S: FileSource, W: io::Write>(
         },
     );
 
-    writer.flush().unwrap();
-
     // write all the file contents
+    visit_input_fs(
+        input,
+        WriteFileVisitor {
+            file_offset_multiplier: allocated.file_offset_multiplier,
+            file_positions: &allocated.file_positions,
+            writer: &mut writer,
+        },
+    );
 
-    todo!()
+    // align the end-of-file
+    writer.align(allocated.file_offset_multiplier)?;
+    writer.flush()?;
+
+    Ok(())
 }
