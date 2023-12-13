@@ -9,6 +9,12 @@ repository.workspace = true
 homepage.workspace = true
 license.workspace = true
 
+[package.metadata.wix]
+upgrade-guid = "75A569A3-C988-462C-905A-D94424E56FD6"
+path-guid = "33DC77AB-FA18-45C1-A4A5-254EE2F9EE89"
+license = false
+eula = false
+
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
