@@ -4,7 +4,7 @@ use arrayref::array_ref;
 use binrw::{BinRead, BinWrite};
 use bumpalo::Bump;
 use proc_bitfield::bitfield;
-use shin_versions::{RomEncoding, RomVersion};
+use shin_versions::{RomDirectoryOffsetDisposition, RomEncoding, RomVersion};
 
 use crate::progress::RomCounter;
 
@@ -83,11 +83,16 @@ impl<'rom, 'ctx> Iterator for DirectoryIter<'rom, 'ctx> {
             break Some(Entry {
                 name,
                 content: if entry.name_and_flags.is_directory() {
-                    // weirdly, v1 specifies offset relative to the start of the ROM
-                    // and v2 specifies it relative to the start of the index
-                    // we handle the v2 case generally and special-case v1 by subtracting the index start offset
-                    if let RomVersion::Rom1V2_1 = self.ctx.version {
-                        data_offset -= self.ctx.index_start_offset;
+                    match self.ctx.version.directory_offset_disposition() {
+                        RomDirectoryOffsetDisposition::FromStart => {
+                            // weirdly, v1 specifies offset relative to the start of the ROM
+                            // and v2 specifies it relative to the start of the index
+                            // we handle the v2 case generally and special-case v1 by subtracting the index start offset
+                            data_offset -= self.ctx.index_start_offset
+                        }
+                        RomDirectoryOffsetDisposition::FromIndexStart => {
+                            // do not shift the offset
+                        }
                     }
                     EntryContent::Directory(DirectoryIter::new(self.ctx, data_offset))
                 } else {

@@ -3,6 +3,7 @@ use std::io::BufWriter;
 use bumpalo::Bump;
 use camino::Utf8PathBuf;
 use clap::Parser;
+use tracing::info;
 
 use crate::{
     create::{rom_allocate, rom_write, InputDirectory},
@@ -52,5 +53,10 @@ impl Create {
             .expect("Failed to write output file");
 
         timing_summary.finish(total_count);
+
+        info!(
+            "Used bump memory: {}",
+            bytesize::ByteSize(bump.allocated_bytes() as u64)
+        );
     }
 }

@@ -8,7 +8,7 @@ use bumpalo::{
 use camino::{Utf8Path, Utf8PathBuf};
 use itertools::Itertools as _;
 use shin_text::{encode_sjis_zstring, measure_sjis_zstring};
-use shin_versions::{RomEncoding, RomVersion};
+use shin_versions::{RomDirectoryOffsetDisposition, RomEncoding, RomVersion};
 use tracing::{trace, warn};
 
 use crate::{
@@ -514,7 +514,7 @@ pub fn rom_allocate<'bump, S: FileSource>(
     allocator.allocate(RomVersion::HEAD_BYTES_SIZE as u64);
     allocator.allocate(match rom_version {
         RomVersion::Rom1V2_1 => RomHeaderV1::SIZE,
-        RomVersion::Rom2V0_1 | RomVersion::Rom2V1_1 => RomHeaderV2::SIZE,
+        RomVersion::Rom2V1_0 | RomVersion::Rom2V1_1 => RomHeaderV2::SIZE,
     } as u64);
 
     let CountVisitor {
@@ -616,6 +616,9 @@ impl<W: io::Write> WriteWrapper<W> {
 
 struct WriteDirectoryInnerVisitor<'scratch, 'a, 'bump, W> {
     rom_encoding: RomEncoding,
+    directory_offset_disposition: RomDirectoryOffsetDisposition,
+
+    index_offset: u64,
     file_offset_multiplier: u64,
     directory_positions: &'bump [(u64, u64)],
     file_positions: &'bump [(u64, u64)],
@@ -624,7 +627,7 @@ struct WriteDirectoryInnerVisitor<'scratch, 'a, 'bump, W> {
     names: Vec<'scratch, &'bump str>,
 }
 impl<'scratch, 'a, 'bump, W: io::Write> WriteDirectoryInnerVisitor<'scratch, 'a, 'bump, W> {
-    fn emit_entry(&mut self, name: &'bump str, is_directory: bool, (offset, size): (u64, u64)) {
+    fn emit_entry(&mut self, name: &'bump str, is_directory: bool, (mut offset, size): (u64, u64)) {
         self.names.push(name);
 
         let name_size = match self.rom_encoding {
@@ -640,6 +643,15 @@ impl<'scratch, 'a, 'bump, W: io::Write> WriteDirectoryInnerVisitor<'scratch, 'a,
         } else {
             self.file_offset_multiplier
         };
+
+        if is_directory {
+            match self.directory_offset_disposition {
+                RomDirectoryOffsetDisposition::FromStart => {}
+                RomDirectoryOffsetDisposition::FromIndexStart => {
+                    offset -= self.index_offset;
+                }
+            }
+        }
 
         let name_and_flags = NameOffsetAndFlags(0)
             .with_is_directory(is_directory)
@@ -693,7 +705,11 @@ impl<'scratch, 'a, 'bump, W: io::Write, S> DirVisitor<'bump, S>
 
 struct WriteDirectoryWalker<'a, 'bump, W> {
     scratch_bump: Bump,
+
     rom_encoding: RomEncoding,
+    directory_offset_disposition: RomDirectoryOffsetDisposition,
+
+    index_offset: u64,
     file_offset_multiplier: u64,
     directory_positions: &'bump [(u64, u64)],
     file_positions: &'bump [(u64, u64)],
@@ -742,6 +758,9 @@ where
 
         let mut visitor = WriteDirectoryInnerVisitor {
             rom_encoding: self.rom_encoding,
+            directory_offset_disposition: self.directory_offset_disposition,
+
+            index_offset: self.index_offset,
             file_offset_multiplier: self.file_offset_multiplier,
             directory_positions: self.directory_positions,
             file_positions: self.file_positions,
@@ -848,6 +867,8 @@ pub fn rom_write<'bump, S: FileSource, W: io::Write>(
 
     let mut writer = WriteWrapper { writer, offset: 0 };
 
+    writer.write_all(&rom_version.head_bytes())?;
+
     match rom_version {
         RomVersion::Rom1V2_1 => {
             assert_eq!(
@@ -862,7 +883,7 @@ pub fn rom_write<'bump, S: FileSource, W: io::Write>(
                 unk: *b"Shin",
             })
         }
-        RomVersion::Rom2V0_1 | RomVersion::Rom2V1_1 => RomHeader::V2(RomHeaderV2 {
+        RomVersion::Rom2V1_0 | RomVersion::Rom2V1_1 => RomHeader::V2(RomHeaderV2 {
             index_size: allocated.index_size.try_into().unwrap(),
             file_offset_multiplier: allocated.file_offset_multiplier.try_into().unwrap(),
             // these bytes appear to be random (hash of the data?)
@@ -880,12 +901,15 @@ pub fn rom_write<'bump, S: FileSource, W: io::Write>(
     // write all the directory indices
     {
         let _span = default_spinner_span!("Writing directory indices");
-        writer.write_all(&rom_version.head_bytes())?;
         walk_input_fs(
             input,
             WriteDirectoryWalker {
                 scratch_bump: Bump::new(),
+
                 rom_encoding: rom_version.encoding(),
+                directory_offset_disposition: rom_version.directory_offset_disposition(),
+
+                index_offset: allocated.index_offset,
                 file_offset_multiplier: RomHeader::default_file_offset_multiplier(rom_version)
                     as u64,
                 directory_positions: &allocated.directory_positions,

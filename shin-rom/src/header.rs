@@ -32,7 +32,7 @@ impl RomHeaderV2 {
 pub enum RomHeader {
     #[br(pre_assert(version == RomVersion::Rom1V2_1))]
     V1(RomHeaderV1),
-    #[br(pre_assert(version == RomVersion::Rom2V0_1 || version == RomVersion::Rom2V1_1))]
+    #[br(pre_assert(version == RomVersion::Rom2V1_0 || version == RomVersion::Rom2V1_1))]
     V2(RomHeaderV2),
 }
 
@@ -47,7 +47,7 @@ impl RomHeader {
     pub fn default_file_offset_multiplier(version: RomVersion) -> usize {
         match version {
             RomVersion::Rom1V2_1 => RomHeaderV1::DEFAULT_FILE_OFFSET_MULTIPLIER,
-            RomVersion::Rom2V0_1 | RomVersion::Rom2V1_1 => {
+            RomVersion::Rom2V1_0 | RomVersion::Rom2V1_1 => {
                 RomHeaderV2::DEFAULT_FILE_OFFSET_MULTIPLIER
             }
         }

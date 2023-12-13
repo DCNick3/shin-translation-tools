@@ -102,7 +102,7 @@ impl ShinVersion {
         use RomVersion::*;
         use ShinVersion::*;
         Some(match self {
-            WhiteEternity => Rom2V0_1,
+            WhiteEternity => Rom2V1_0,
             // konosuba doesn't store its assets in the rom, it just uses switch's romfs
             Konosuba => return None,
         })
@@ -115,7 +115,7 @@ pub enum RomVersion {
     /// 'ROM ' magic, version 0x00020001
     Rom1V2_1,
     /// 'ROM2' magic, version 0x00000001
-    Rom2V0_1,
+    Rom2V1_0,
     /// 'ROM2' magic, version 0x00010001
     Rom2V1_1,
 }
@@ -124,6 +124,12 @@ pub enum RomVersion {
 pub enum RomEncoding {
     Utf8,
     ShiftJIS,
+}
+
+#[derive(Debug, Copy, Clone, Ord, PartialOrd, Eq, PartialEq)]
+pub enum RomDirectoryOffsetDisposition {
+    FromStart,
+    FromIndexStart,
 }
 
 impl RomVersion {
@@ -144,7 +150,7 @@ impl RomVersion {
 
         Some(match (magic, version) {
             (b"ROM ", 0x00020001) => RomVersion::Rom1V2_1,
-            (b"ROM2", 0x00000001) => RomVersion::Rom2V0_1,
+            (b"ROM2", 0x00000001) => RomVersion::Rom2V1_0,
             (b"ROM2", 0x00010001) => RomVersion::Rom2V1_1,
             _ => return None,
         })
@@ -154,7 +160,7 @@ impl RomVersion {
         use RomVersion::*;
         match self {
             Rom1V2_1 => *b"ROM \x01\x00\x02\x00",
-            Rom2V0_1 => *b"ROM2\x01\x00\x00\x00",
+            Rom2V1_0 => *b"ROM2\x01\x00\x00\x00",
             Rom2V1_1 => *b"ROM2\x01\x00\x01\x00",
         }
     }
@@ -168,9 +174,18 @@ impl RomVersion {
             // Guessing ShiftJIS here to be more lenient, but no idea honestly
             Rom1V2_1 => ShiftJIS,
             // Definitely ShiftJIS, WhiteEternity has some ShiftJIS-encoded CJK characters
-            Rom2V0_1 => ShiftJIS,
+            Rom2V1_0 => ShiftJIS,
             // Definitely unicode, Gerokasu has some UTF-8-encoded CJK characters
             Rom2V1_1 => Utf8,
+        }
+    }
+
+    pub fn directory_offset_disposition(&self) -> RomDirectoryOffsetDisposition {
+        use RomDirectoryOffsetDisposition::*;
+        use RomVersion::*;
+        match self {
+            Rom1V2_1 => FromStart,
+            Rom2V1_0 | Rom2V1_1 => FromIndexStart,
         }
     }
 }
