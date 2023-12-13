@@ -6,6 +6,7 @@ description = "A tool to help translate strings within shin's SNR files."
 
 authors = { workspace = true }
 repository = { workspace = true }
+homepage = { workspace = true }
 license = { workspace = true }
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
@@ -19,5 +20,7 @@ bumpalo = { workspace = true, features = ["collections"] }
 serde = { version = "1.0.193", features = ["derive"] }
 csv = "1.3.0"
 smallvec = { version = "2.0.0-alpha.1", features = ["write"] }
-clap = { workspace = true, features = ["derive"] }
 camino = { workspace = true }
+
+clap = { workspace = true, features = ["derive"] }
+clap_complete = { workspace = true }

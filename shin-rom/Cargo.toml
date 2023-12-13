@@ -6,6 +6,7 @@ description = "A tool to extract an package .rom files used by shin engine"
 
 authors = { workspace = true }
 repository = { workspace = true }
+homepage = { workspace = true }
 license = { workspace = true }
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
@@ -14,7 +15,9 @@ license = { workspace = true }
 shin-versions = { path = "../shin-versions", features = ["clap"] }
 shin-text = { path = "../shin-text" }
 
-clap = { workspace = true, features = ["derive"]  }
+clap = { workspace = true, features = ["derive", "cargo"]  }
+clap_complete = { workspace = true }
+
 camino = { workspace = true }
 bumpalo = { workspace = true }
 binrw = "0.13.3"

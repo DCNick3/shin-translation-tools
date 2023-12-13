@@ -30,7 +30,7 @@ impl<'r, R: Reactor> Ctx<'r, R> {
                 self.short();
             }
             NumberSpecStyle::VarInt => {
-                todo!()
+                todo!("Support for VarInt numbers")
             }
         }
     }

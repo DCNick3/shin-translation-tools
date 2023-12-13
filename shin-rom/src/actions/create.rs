@@ -15,10 +15,13 @@ use crate::{
 /// Create a ROM file from a file tree
 #[derive(Parser)]
 pub struct Create {
+    /// Directory to package into a ROM file
     source_directory: Utf8PathBuf,
+    /// The path to the output ROM file
     output_path: Utf8PathBuf,
+    /// Version of the ROM format to use or a game ID
     #[clap(short, long, value_parser = RomVersionSpecifier::parser())]
-    version: RomVersionSpecifier,
+    rom_version: RomVersionSpecifier,
 }
 
 impl Create {
@@ -26,7 +29,7 @@ impl Create {
         let Create {
             source_directory,
             output_path,
-            version,
+            rom_version: version,
         } = self;
 
         let timing_summary = RomTimingSummary::new(ProgressAction::Create);

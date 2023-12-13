@@ -154,6 +154,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "clap_complete"
+version = "4.4.4"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "bffe91f06a11b4b9420f62103854e90867812cd5d01557f853c5ee8e791b12ae"
+dependencies = [
+ "clap",
+]
+
+[[package]]
 name = "clap_derive"
 version = "4.4.7"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -482,6 +491,7 @@ dependencies = [
  "bytesize",
  "camino",
  "clap",
+ "clap_complete",
  "indicatif",
  "itertools",
  "memmap2",
@@ -508,6 +518,7 @@ dependencies = [
  "bumpalo",
  "camino",
  "clap",
+ "clap_complete",
  "csv",
  "once_cell",
  "serde",

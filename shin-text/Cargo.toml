@@ -6,6 +6,7 @@ description = "A library implementing the variant of Shift-JIS used by the shin 
 
 authors = { workspace = true }
 repository = { workspace = true }
+homepage = { workspace = true }
 license = { workspace = true }
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html

@@ -9,7 +9,8 @@ use std::{
 };
 
 use camino::Utf8PathBuf;
-use clap::{Parser, Subcommand};
+use clap::{Args, CommandFactory, Parser};
+use clap_complete::Shell;
 use shin_versions::ShinVersion;
 
 use crate::{
@@ -43,55 +44,105 @@ fn react_with<R: Reactor>(reactor: &mut R, version: ShinVersion) {
     react_impl(&mut ctx);
 }
 
-#[derive(Parser)]
-struct Cli {
+#[derive(Args, Clone)]
+struct CommonArgs {
     #[clap(value_enum)]
-    version: ShinVersion,
+    engine_version: ShinVersion,
     snr_file: Utf8PathBuf,
-    #[clap(subcommand)]
-    command: Command,
 }
 
-#[derive(Subcommand)]
+/// Rewrite shin SNR file with translated strings
+///
+/// TL;DR:
+///
+/// 1. shin-tl read <engine-version> <main.snr> <strings.csv>
+///
+/// 2. Translate strings in strings.csv
+///
+/// 3. shin-tl rewrite <engine-version> <main.snr> <strings.csv> <main_translated.snr>
+///
+/// For more usage documentation see https://github.com/DCNick3/shin-translation-tools/blob/master/shin-tl/README.md
+#[derive(Parser)]
+#[clap(version, author)]
 enum Command {
     /// Read strings from an SNR file to a CSV file for translation
-    Read { output: Utf8PathBuf },
+    Read {
+        #[clap(flatten)]
+        common: CommonArgs,
+        output: Utf8PathBuf,
+    },
     /// Read strings from an SNR file and dump them to the console
-    ReadConsole {},
+    ReadConsole {
+        #[clap(flatten)]
+        common: CommonArgs,
+    },
     /// Read SNR file, while validating jump offsets in the code
-    ReadValidateOffsets {},
+    ReadValidateOffsets {
+        #[clap(flatten)]
+        common: CommonArgs,
+    },
     /// Rewrite an SNR file to use translated strings from a CSV file
     Rewrite {
+        #[clap(flatten)]
+        common: CommonArgs,
         translations: Utf8PathBuf,
         output: Utf8PathBuf,
+    },
+
+    /// Generate shell complete script for the given shell
+    GenerateCompletion {
+        /// The shell to generate the completion for
+        #[clap(value_enum)]
+        shell: Shell,
     },
 }
 
 fn main() {
-    let cli = Cli::parse();
+    let command = Command::parse();
 
-    let snr_file = std::fs::read(cli.snr_file).expect("Reading the SNR file failed");
-    let version = cli.version;
+    let common = match &command {
+        &Command::GenerateCompletion { shell } => {
+            eprintln!("Generating completion file for {:?}...", shell);
+
+            let cmd = &mut Command::command();
+
+            clap_complete::generate(
+                shell,
+                cmd,
+                cmd.get_name().to_string(),
+                &mut std::io::stdout(),
+            );
+
+            return;
+        }
+        Command::Read { common, .. } => common,
+        Command::ReadConsole { common, .. } => common,
+        Command::ReadValidateOffsets { common, .. } => common,
+        Command::Rewrite { common, .. } => common,
+    };
+
+    let snr_file = std::fs::read(&common.snr_file).expect("Reading the SNR file failed");
+    let version = common.engine_version;
 
     assert_eq!(&snr_file[0..4], b"SNR ", "SNR file magic mismatch");
     let code_offset = u32::from_le_bytes(snr_file[0x20..0x24].try_into().unwrap());
 
     let reader = Reader::new(&snr_file, code_offset as usize);
 
-    match cli.command {
-        Command::Read { output } => {
+    match command {
+        Command::Read { common: _, output } => {
             let writer = csv::Writer::from_path(output).expect("Opening the CSV file failed");
 
             let mut reactor = StringTraceReactor::new(reader, CsvTraceListener::new(writer));
 
             react_with(&mut reactor, version);
         }
-        Command::ReadConsole {} => {
+        Command::ReadConsole { common: _ } => {
             let mut reactor = StringTraceReactor::new(reader, ConsoleTraceListener);
 
             react_with(&mut reactor, version);
         }
-        Command::ReadValidateOffsets {} => {
+        Command::ReadValidateOffsets { common: _ } => {
             let mut reactor = OffsetValidatorReactor::new(reader);
 
             react_with(&mut reactor, version);
@@ -106,6 +157,7 @@ fn main() {
             }
         }
         Command::Rewrite {
+            common: _,
             translations,
             output,
         } => {
@@ -138,6 +190,9 @@ fn main() {
             output
                 .write_all(&vec![0; padding as usize])
                 .expect("Writing to the output file failed");
+        }
+        Command::GenerateCompletion { .. } => {
+            unreachable!()
         }
     }
 }

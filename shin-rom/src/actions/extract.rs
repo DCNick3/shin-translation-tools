@@ -24,7 +24,7 @@ pub struct Extract {
     output_path: Utf8PathBuf,
     /// Specify the version of the rom format to use. Will be detected automatically if not specified.
     #[clap(short, long, value_parser = RomVersionSpecifier::parser())]
-    version: Option<RomVersionSpecifier>,
+    rom_version: Option<RomVersionSpecifier>,
 }
 
 impl Extract {
@@ -32,7 +32,7 @@ impl Extract {
         let Extract {
             rom_path,
             output_path,
-            version,
+            rom_version: version,
         } = self;
         info!("Extracting {:?} to {:?}", rom_path, output_path);
 

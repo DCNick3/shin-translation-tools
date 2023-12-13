@@ -13,6 +13,26 @@ Download the latest release from the [releases page](https://github.com/DCNick3/
 cargo install --path shin-tl
 ```
 
+### Shell completion
+
+To enable shell completion, generate the completion script and source it in your shell
+
+For linux shells:
+
+```bash
+shin-tl generate-completion bash > ~/.local/share/bash-completion/completions/shin-tl
+shin-tl generate-completion zsh > ~/.local/share/zsh/site-functions/_shin-tl
+shin-tl generate-completion fish > ~/.config/fish/completions/shin-tl.fish
+```
+
+For powershell:
+
+```powershell
+shin-tl generate-completion powershell > "$env:USERPROFILE\Documents\WindowsPowerShell\Modules\shin-tl.ps1"
+```
+
+Then re-login or source the generated file.
+
 ## Usage
 
 ### Preparation 
@@ -28,7 +48,7 @@ The `main.snr` is the file containing the game script and is the one of the main
 To extract strings from the snr file into a csv file, use a command like this: 
 
 ```bash
-shin-tl <engine-version> <main.snr> read <strings.csv>
+shin-tl read <engine-version> <main.snr> <strings.csv>
 ```
 
 The engine version is the version of the engine used by the game. Only AstralAir no Shiroki Towa -White Eternity- is supported for now, so it should be `white-eternity`.
@@ -64,7 +84,7 @@ Create a translation csv by either putting your translation into the `translated
 To inject the translated strings back into the snr file, use a command like this:
 
 ```bash
-shin-tl <engine-version> <main.snr> rewrite <translation.csv> <main_translated.snr>
+shin-tl rewrite <engine-version> <main.snr> <translation.csv> <main_translated.snr>
 ```
 
 This will read the translation csv, replace the strings in the snr file and write the result to `main_translated.snr`.
