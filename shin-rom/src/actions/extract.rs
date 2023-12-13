@@ -6,12 +6,12 @@ use camino::Utf8PathBuf;
 use clap::Parser;
 use memmap2::Advice;
 use shin_versions::{RomEncoding, RomVersion};
+use tracing::info;
 
 use crate::{
     header::RomHeader,
-    index::{DirectoryIterCtx, EntryContent},
-    iter_rom,
-    progress::ExtractProgress,
+    index::{self, DirectoryIterCtx, EntryContent},
+    progress::{ProgressAction, RomProgress, RomTimingSummary},
     version::RomVersionSpecifier,
 };
 
@@ -34,7 +34,9 @@ impl Extract {
             output_path,
             version,
         } = self;
-        eprintln!("Extracting {:?} to {:?}", rom_path, output_path);
+        info!("Extracting {:?} to {:?}", rom_path, output_path);
+
+        let timing_summary = RomTimingSummary::new(ProgressAction::Extract);
 
         let version = version.map(|v| v.rom_version());
         let rom_file = File::open(&rom_path).expect("Failed to open rom file");
@@ -47,10 +49,10 @@ impl Extract {
         cursor.read_exact(&mut head_bytes).unwrap();
 
         let version = version.unwrap_or_else(|| RomVersion::detect(&head_bytes));
-        eprintln!("Extracting ROM as {:?}", version);
+        info!("Extracting ROM as {:?}", version);
 
         let header = RomHeader::read_args(&mut cursor, (version,)).unwrap();
-        eprintln!("Header: {:x?}", header);
+        info!("Header: {:x?}", header);
 
         #[cfg(unix)]
         rom_file
@@ -86,7 +88,7 @@ impl Extract {
         std::env::set_current_dir(&output_path).expect("Failed to set current directory");
 
         // first, create all the directories
-        iter_rom(&ctx, |path, entry| match entry {
+        index::walk_rom(&ctx, |path, entry| match entry {
             EntryContent::File(_) => {}
             EntryContent::Directory(_) => {
                 if let Err(e) = std::fs::create_dir_all(path) {
@@ -95,25 +97,26 @@ impl Extract {
             }
         });
 
-        let mut progress = ExtractProgress::new(&ctx);
+        let total_counts = index::rom_count_total(&ctx);
+        {
+            let mut progress = RomProgress::new(total_counts);
 
-        iter_rom(&ctx, |path, entry| {
-            progress.add(entry);
-            match entry {
+            index::walk_rom(&ctx, |path, entry| match entry {
                 EntryContent::File(content) => {
+                    progress.add_file(content.len() as u64);
                     if let Err(e) = std::fs::write(path, content) {
                         panic!("Failed to write file {:?}: {}", path, e)
                     }
                 }
                 EntryContent::Directory(_) => {}
-            }
-        });
+            });
+        }
 
-        progress.finish();
+        timing_summary.finish(total_counts);
 
         if version.encoding() != RomEncoding::Utf8 {
             let used_memory = ctx.bump.allocated_bytes();
-            eprintln!("Used string memory: {} bytes", used_memory);
+            info!("Used string memory: {} bytes", used_memory);
         }
     }
 }

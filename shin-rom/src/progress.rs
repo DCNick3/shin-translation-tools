@@ -1,92 +1,124 @@
 use std::time::Instant;
 
-use indicatif::{MultiProgress, ProgressBar, ProgressStyle};
+use indicatif::ProgressStyle;
+use tracing::{info, info_span, span::EnteredSpan};
+use tracing_indicatif::span_ext::IndicatifSpanExt;
 
-use crate::index::{DirectoryIterCtx, EntryContent};
-
-#[derive(Default)]
-struct RomCounter {
+#[derive(Default, Copy, Clone)]
+pub struct RomCounter {
     files: u64,
-    directories: u64,
     bytes: u64,
 }
 
 impl RomCounter {
-    fn add(&mut self, entry: &EntryContent) {
-        match entry {
-            EntryContent::File(content) => {
-                self.files += 1;
-                self.bytes += content.len() as u64;
-            }
-            EntryContent::Directory(_) => self.directories += 1,
-        }
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    pub fn add_file(&mut self, size: u64) {
+        self.files += 1;
+        self.bytes += size;
     }
 }
 
-pub struct ExtractProgress {
+pub enum ProgressAction {
+    Extract,
+    Create,
+}
+
+pub struct RomTimingSummary {
+    action: ProgressAction,
     start_time: Instant,
-    running_counter: RomCounter,
-    #[allow(unused)] // we need to keep the multi progress alive
-    multi_progress: MultiProgress,
-    file_progress: ProgressBar,
-    size_progress: ProgressBar,
 }
 
-impl ExtractProgress {
-    pub fn new(ctx: &DirectoryIterCtx) -> Self {
-        let mut total_counter = RomCounter::default();
-        super::iter_rom(&ctx, |_, entry| total_counter.add(entry));
-
-        let multi_progress = MultiProgress::new();
-        let file_progress = multi_progress.add(
-            ProgressBar::new(total_counter.files).with_style(
-                ProgressStyle::default_bar()
-                    .template("files: [{bar:40.cyan/blue}] {human_pos}/{human_len} ({per_sec})")
-                    .unwrap()
-                    .progress_chars("#>-"),
-            ),
-        );
-        let size_progress = multi_progress.add(ProgressBar::new(total_counter.bytes)
-            .with_style(ProgressStyle::default_bar()
-                .template("bytes: [{bar:40.cyan/blue}] {bytes}/{total_bytes} ({binary_bytes_per_sec})")
-                .unwrap()
-                .progress_chars("#>-")));
-
-        multi_progress.add(file_progress.clone());
-        multi_progress.add(size_progress.clone());
-
-        ExtractProgress {
+impl RomTimingSummary {
+    pub fn new(action: ProgressAction) -> Self {
+        RomTimingSummary {
+            action,
             start_time: Instant::now(),
-            running_counter: RomCounter::default(),
-            multi_progress,
-            file_progress,
-            size_progress,
         }
     }
 
-    pub fn add(&mut self, entry: &EntryContent) {
-        self.running_counter.add(entry);
-
-        self.file_progress.set_position(self.running_counter.files);
-        self.size_progress.set_position(self.running_counter.bytes);
-    }
-
-    pub fn finish(&self) {
-        self.file_progress.finish();
-        self.size_progress.finish();
-
+    pub fn finish(self, total_counter: RomCounter) {
         let elapsed = self.start_time.elapsed();
 
-        let files_per_sec = self.running_counter.files as f64 / elapsed.as_secs_f64();
-        let bytes_per_sec = self.running_counter.bytes as f64 / elapsed.as_secs_f64();
+        let files_per_sec = total_counter.files as f64 / elapsed.as_secs_f64();
+        let bytes_per_sec = total_counter.bytes as f64 / elapsed.as_secs_f64();
 
-        eprintln!(
-            "Extracted {} files and {} bytes in {:.2}s ({} files/s, {}/s)",
-            self.running_counter.files,
-            bytesize::ByteSize(self.running_counter.bytes),
+        let action_text = match self.action {
+            ProgressAction::Extract => "Extracted",
+            ProgressAction::Create => "Packed",
+        };
+
+        info!(
+            "{} {} files and {} bytes in {:.2}s ({} files/s, {}/s)",
+            action_text,
+            total_counter.files,
+            bytesize::ByteSize(total_counter.bytes),
             elapsed.as_secs_f64(),
             files_per_sec as u64,
             bytesize::ByteSize(bytes_per_sec as u64),
         );
     }
+}
+
+pub struct RomProgress {
+    running_counter: RomCounter,
+    file_progress_span: EnteredSpan,
+    size_progress_span: EnteredSpan,
+}
+
+impl RomProgress {
+    pub fn new(total_counter: RomCounter) -> Self {
+        let file_progress_span = info_span!("files");
+        file_progress_span.pb_set_style(
+            &ProgressStyle::default_bar()
+                .template("{span_child_prefix}files: [{bar:40.cyan/blue}] {human_pos}/{human_len} ({per_sec})")
+                .unwrap()
+                .progress_chars("#>-"),
+        );
+        file_progress_span.pb_set_length(total_counter.files);
+
+        let size_progress_span = info_span!("bytes");
+        size_progress_span.pb_set_style(
+            &ProgressStyle::default_bar()
+                .template(
+                    "{span_child_prefix}bytes: [{bar:40.cyan/blue}] {bytes}/{total_bytes} ({binary_bytes_per_sec})",
+                )
+                .unwrap()
+                .progress_chars("#>-"),
+        );
+        size_progress_span.pb_set_length(total_counter.bytes);
+
+        RomProgress {
+            running_counter: RomCounter::default(),
+            file_progress_span: file_progress_span.entered(),
+            size_progress_span: size_progress_span.entered(),
+        }
+    }
+
+    pub fn add_file(&mut self, size: u64) {
+        self.running_counter.add_file(size);
+
+        self.file_progress_span
+            .pb_set_position(self.running_counter.files);
+        self.size_progress_span
+            .pb_set_position(self.running_counter.bytes);
+    }
+}
+
+pub fn default_spinner_style() -> ProgressStyle {
+    ProgressStyle::with_template("{span_child_prefix}{spinner} {span_name}").unwrap()
+}
+
+#[macro_export]
+macro_rules! default_spinner_span {
+    ($name:expr) => {{
+        let span = tracing::info_span!($name);
+        tracing_indicatif::span_ext::IndicatifSpanExt::pb_set_style(
+            &span,
+            &crate::progress::default_spinner_style(),
+        );
+        span.entered()
+    }};
 }

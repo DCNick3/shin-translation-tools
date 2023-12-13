@@ -6,6 +6,8 @@ use bumpalo::Bump;
 use proc_bitfield::bitfield;
 use shin_versions::{RomEncoding, RomVersion};
 
+use crate::progress::RomCounter;
+
 pub const DIRECTORY_OFFSET_MULTIPLIER: usize = 0x10;
 
 pub struct DirectoryIterCtx<'rom> {
@@ -126,4 +128,37 @@ pub struct Entry<'rom, 'bump> {
 pub enum EntryContent<'rom, 'bump> {
     File(&'rom [u8]),
     Directory(DirectoryIter<'rom, 'bump>),
+}
+
+// this could be made into a proper iterator, but:
+// 1. it's tedious to manage all that nested interators
+// 2. we wouldn't be able to re-use the path buffer (need a lending iterator for it)
+pub fn walk_rom<F: FnMut(&str, &EntryContent)>(ctx: &DirectoryIterCtx, mut f: F) {
+    fn recur<F: FnMut(&str, &EntryContent)>(f: &mut F, path_buf: &mut String, iter: DirectoryIter) {
+        for entry in iter {
+            path_buf.push_str(&entry.name);
+            f(&path_buf, &entry.content);
+            match entry.content {
+                EntryContent::File(_) => {}
+                EntryContent::Directory(iter) => {
+                    path_buf.push('/');
+                    recur(f, path_buf, iter);
+                    path_buf.pop().unwrap();
+                }
+            }
+            path_buf.truncate(path_buf.len() - entry.name.len());
+        }
+    }
+
+    recur(&mut f, &mut String::new(), DirectoryIter::new(&ctx, 0));
+}
+
+pub fn rom_count_total(ctx: &DirectoryIterCtx) -> RomCounter {
+    let mut counter = RomCounter::new();
+    walk_rom(&ctx, |_, entry| {
+        if let EntryContent::File(file) = entry {
+            counter.add_file(file.len() as u64);
+        }
+    });
+    counter
 }

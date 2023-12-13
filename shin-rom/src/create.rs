@@ -9,10 +9,13 @@ use camino::{Utf8Path, Utf8PathBuf};
 use itertools::Itertools as _;
 use shin_text::{encode_sjis_zstring, measure_sjis_zstring};
 use shin_versions::{RomEncoding, RomVersion};
+use tracing::{trace, warn};
 
 use crate::{
+    default_spinner_span,
     header::{RomHeader, RomHeaderV1, RomHeaderV2},
     index::{NameOffsetAndFlags, RawEntry, DIRECTORY_OFFSET_MULTIPLIER},
+    progress::{RomCounter, RomProgress},
 };
 
 #[allow(unused_variables)] // I don't want to prefix these with _, as it makes the IDE-generated impls have those too
@@ -105,7 +108,7 @@ where
     ) where
         V: FsWalker<'bump, S>,
     {
-        // eprintln!("{:10} {}", directory_index, path_buf);
+        // trace!("{:10} {}", directory_index, path_buf);
         visitor.enter_directory(directory_index, name, path_buf, directory);
 
         // this index needs to be consistent with the index computed in `visit_directory`
@@ -220,7 +223,7 @@ impl<'bump, 'a> InputDirectory<'bump, BaseDirFileSource<'a>> {
                 let ty = v.file_type().expect("Failed to get file type for rom");
                 if !ty.is_dir() && !ty.is_file() {
                     // TODO: resolve symlinks?
-                    eprintln!("Skipping non-file, non-directory {:?}", v.path());
+                    warn!("Skipping non-file, non-directory {:?}", v.path());
                     continue;
                 }
 
@@ -281,6 +284,22 @@ impl<'a> FileSource for BaseDirFileSource<'a> {
     fn size(&self, path: &str) -> io::Result<u64> {
         let path = self.base_dir.join(path);
         std::fs::metadata(path).map(|m| m.len())
+    }
+}
+
+impl<'bump, S: FileSource> DirVisitor<'bump, S> for RomCounter {
+    fn visit_file(
+        &mut self,
+        _index: usize,
+        _name: &'bump str,
+        path_buf: &mut Utf8PathBuf,
+        file: &InputFile<S>,
+    ) {
+        self.add_file(
+            file.0
+                .size(path_buf.as_str())
+                .expect("Failed to get file size"),
+        );
     }
 }
 
@@ -403,10 +422,10 @@ impl<'a, 'bump, S: FileSource> DirVisitor<'bump, S> for AllocateFileVisitor<'a, 
         let my_offset = self.allocator.position;
         let my_size = file.0.size(path.as_str()).expect("Failed to get file size");
 
-        // eprintln!(
-        //     "{my_offset:#018x} {:#010x} {my_size:#010x} {path:80}",
-        //     my_offset / 0x800
-        // );
+        trace!(
+            "{my_offset:#018x} {:#010x} {my_size:#010x} {path:80}",
+            my_offset / 0x800
+        );
 
         self.allocator.allocate(my_size);
 
@@ -457,7 +476,7 @@ impl<'bump, S> FsWalker<'bump, S> for GatherEntryParents<'bump> {
             self.directory_index += 1;
         }
 
-        // eprintln!("{:10} {}", self_index, path_buf);
+        // trace!("{:10} {}", index, path_buf);
 
         let mut visitor = GatherEntryParentsInnerVisitor {
             parent_index: index,
@@ -630,10 +649,10 @@ impl<'scratch, 'a, 'bump, W: io::Write> WriteDirectoryInnerVisitor<'scratch, 'a,
             .expect("rom offset too large");
         let data_size = size.try_into().expect("file too large");
 
-        // eprintln!(
-        //     "{offset:#018x} {:#010x} {data_offset:#010x} {data_size:#010x} {name:24}",
-        //     name_and_flags.0
-        // );
+        trace!(
+            "{offset:#018x} {:#010x} {data_offset:#010x} {data_size:#010x} {name:24}",
+            name_and_flags.0
+        );
 
         let entry = RawEntry {
             name_and_flags,
@@ -781,6 +800,7 @@ struct WriteFileVisitor<'a, 'bump, W> {
     file_offset_multiplier: u64,
     file_positions: &'bump [(u64, u64)],
     writer: &'a mut WriteWrapper<W>,
+    progress: &'a mut RomProgress,
 }
 
 impl<'a, 'bump, W: io::Write, S: FileSource> DirVisitor<'bump, S>
@@ -805,6 +825,8 @@ impl<'a, 'bump, W: io::Write, S: FileSource> DirVisitor<'bump, S>
         std::io::copy(&mut stream, &mut self.writer)
             .unwrap_or_else(|e| panic!("Failed to copy file {:?} to rom: {:?}", path_buf, e));
 
+        self.progress.add_file(size);
+
         assert_eq!(
             size,
             self.writer.offset - offset,
@@ -819,11 +841,13 @@ pub fn rom_write<'bump, S: FileSource, W: io::Write>(
     input: &InputDirectory<'bump, S>,
     allocated: &AllocatedRom<'bump>,
     writer: &mut W,
-) -> BinResult<()> {
+) -> BinResult<RomCounter> {
     use io::Write;
+
+    let _span = default_spinner_span!("Writing rom contents");
+
     let mut writer = WriteWrapper { writer, offset: 0 };
 
-    writer.write_all(&rom_version.head_bytes())?;
     match rom_version {
         RomVersion::Rom1V2_1 => {
             assert_eq!(
@@ -854,34 +878,45 @@ pub fn rom_write<'bump, S: FileSource, W: io::Write>(
     // https://github.com/Crazytieguy/gat-lending-iterator/issues/20
 
     // write all the directory indices
-    walk_input_fs(
-        input,
-        WriteDirectoryWalker {
-            scratch_bump: Bump::new(),
-            rom_encoding: rom_version.encoding(),
-            file_offset_multiplier: RomHeader::default_file_offset_multiplier(rom_version) as u64,
-            directory_positions: &allocated.directory_positions,
-            file_positions: &allocated.file_positions,
-            directory_parent_indices: &allocated.directory_parent_indices,
-            directory_index: 1, // to compensate for the root directory
-            file_index: 0,
-            writer: &mut writer,
-        },
-    );
+    {
+        let _span = default_spinner_span!("Writing directory indices");
+        writer.write_all(&rom_version.head_bytes())?;
+        walk_input_fs(
+            input,
+            WriteDirectoryWalker {
+                scratch_bump: Bump::new(),
+                rom_encoding: rom_version.encoding(),
+                file_offset_multiplier: RomHeader::default_file_offset_multiplier(rom_version)
+                    as u64,
+                directory_positions: &allocated.directory_positions,
+                file_positions: &allocated.file_positions,
+                directory_parent_indices: &allocated.directory_parent_indices,
+                directory_index: 1, // to compensate for the root directory
+                file_index: 0,
+                writer: &mut writer,
+            },
+        );
+    }
 
-    // write all the file contents
-    visit_input_fs(
-        input,
-        WriteFileVisitor {
-            file_offset_multiplier: allocated.file_offset_multiplier,
-            file_positions: &allocated.file_positions,
-            writer: &mut writer,
-        },
-    );
+    let total_count = visit_input_fs(input, RomCounter::new());
+    {
+        let _span = default_spinner_span!("Writing file contents");
+        let mut progress = RomProgress::new(total_count);
+        // write all the file contents
+        visit_input_fs(
+            input,
+            WriteFileVisitor {
+                file_offset_multiplier: allocated.file_offset_multiplier,
+                file_positions: &allocated.file_positions,
+                writer: &mut writer,
+                progress: &mut progress,
+            },
+        );
+    }
 
     // align the end-of-file
     writer.align(allocated.file_offset_multiplier)?;
     writer.flush()?;
 
-    Ok(())
+    Ok(total_count)
 }
