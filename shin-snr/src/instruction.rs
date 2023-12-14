@@ -13,8 +13,11 @@ pub enum Instruction {
     // they do not affect the game state and are internal to the VM
     // these do not seem to change between versions
     // NOTE: not all implemented opcodes are implemented here, because I am lazy
+    /// Unary operation
     uo,
+    /// Binary operation
     bo,
+    /// Expression (encoded in RPN)
     exp,
     /// Move many
     mm,
@@ -22,16 +25,24 @@ pub enum Instruction {
     gt,
     /// Set table (table is array of registers)
     st,
+    /// Conditional jump
     jc,
+    /// Unconditional jump
     j,
+    /// Call subroutine
     gosub,
+    /// Return from subroutine
     retsub,
+    /// Jump table
     jt,
     pop,
+    /// Call subroutine table
     gosubt,
     rnd,
     push,
+    /// Call function
     call,
+    /// Return from function
     r#return,
 
     // Commands
@@ -219,7 +230,7 @@ pub fn react_instr<R: Reactor>(ctx: &mut Ctx<R>, instr: Instruction) {
                 if t < 0x20 {
                     continue;
                 } else {
-                    assert_eq!(t, 0xff, "Unexpected expression byte 0x{:02x}", t);
+                    assert_eq!(t, 0xff, "Unexpected expression byte 0x{t:02x}");
                     break;
                 }
             }
@@ -236,6 +247,7 @@ pub fn react_instr<R: Reactor>(ctx: &mut Ctx<R>, instr: Instruction) {
             ctx.number();
             let number_count = ctx.short();
             // NOTE: in umineko, these are padded to 4 bytes to allow for seeking
+            // with NumberSpecStyle::Short, this is not necessary
             for _ in 0..number_count {
                 ctx.number();
             }
