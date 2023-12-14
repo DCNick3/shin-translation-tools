@@ -1,4 +1,7 @@
-// this excludes all the magic/version info
+//! Definitions for the ROM headers, including reading and writing routines thanks to [`binrw`].
+//!
+//! Note that these definitions do NOT include the magic and version bytes that go before the header.
+//! These are 8 bytes used for version detection and should be handled with [`shin_versions::RomVersion::detect`] and [`shin_versions::RomVersion::head_bytes`].
 
 use binrw::{BinRead, BinWrite};
 use shin_versions::RomVersion;

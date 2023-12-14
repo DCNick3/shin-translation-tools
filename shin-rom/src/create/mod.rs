@@ -1,17 +1,22 @@
+mod allocate;
+mod source;
+mod visit;
+mod write;
+
 use std::io::BufWriter;
 
 use bumpalo::Bump;
 use camino::Utf8PathBuf;
 use shin_versions::RomVersion;
+use source::InputDirectory;
 use tracing::info;
 
 use crate::{
-    create::{rom_allocate, rom_write, InputDirectory},
     default_spinner_span,
     progress::{ProgressAction, RomTimingSummary},
 };
 
-// TODO: make a proper library API for this
+// FIXME: the API only allowing the use of filesystem paths is a bit limiting. We should be able to abstract away from concrete source and destination types here
 pub fn rom_create(source_directory: Utf8PathBuf, output_path: Utf8PathBuf, version: RomVersion) {
     let timing_summary = RomTimingSummary::new(ProgressAction::Create);
 
@@ -24,13 +29,13 @@ pub fn rom_create(source_directory: Utf8PathBuf, output_path: Utf8PathBuf, versi
 
     let allocated = {
         let _span = default_spinner_span!("Allocating file positions");
-        rom_allocate(&bump, version, &source_directory)
+        allocate::rom_allocate(&bump, version, &source_directory)
     };
 
     let output_file = std::fs::File::create(output_path).expect("Failed to create output file");
     let mut output_writer = BufWriter::new(output_file);
 
-    let total_count = rom_write(version, &source_directory, &allocated, &mut output_writer)
+    let total_count = write::rom_write(version, &source_directory, &allocated, &mut output_writer)
         .expect("Failed to write output file");
 
     timing_summary.finish(total_count);

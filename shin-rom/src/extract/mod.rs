@@ -1,3 +1,5 @@
+mod iter;
+
 use std::{fs::File, io::Read as _};
 
 use binrw::BinRead as _;
@@ -6,12 +8,14 @@ use camino::Utf8PathBuf;
 use shin_versions::{RomEncoding, RomVersion};
 use tracing::info;
 
+use self::iter::{DirectoryIterCtx, EntryContent};
 use crate::{
     header::RomHeader,
-    index::{self, DirectoryIterCtx, EntryContent},
     progress::{ProgressAction, RomProgress, RomTimingSummary},
 };
 
+// FIXME: the API only allowing the use of filesystem paths is a bit limiting. We should be able to abstract away from concrete source and destination types here
+// an API to access the ROM files individually as in the game would also be nice
 pub fn rom_extract(rom_path: Utf8PathBuf, output_path: Utf8PathBuf, version: Option<RomVersion>) {
     info!("Extracting {:?} to {:?}", rom_path, output_path);
 
@@ -70,7 +74,7 @@ pub fn rom_extract(rom_path: Utf8PathBuf, output_path: Utf8PathBuf, version: Opt
     std::env::set_current_dir(&output_path).expect("Failed to set current directory");
 
     // first, create all the directories
-    index::walk_rom(&ctx, |path, entry| match entry {
+    iter::walk_rom(&ctx, |path, entry| match entry {
         EntryContent::File(_) => {}
         EntryContent::Directory(_) => {
             if let Err(e) = std::fs::create_dir_all(path) {
@@ -79,11 +83,11 @@ pub fn rom_extract(rom_path: Utf8PathBuf, output_path: Utf8PathBuf, version: Opt
         }
     });
 
-    let total_counts = index::rom_count_total(&ctx);
+    let total_counts = iter::rom_count_total(&ctx);
     {
         let mut progress = RomProgress::new(total_counts);
 
-        index::walk_rom(&ctx, |path, entry| match entry {
+        iter::walk_rom(&ctx, |path, entry| match entry {
             EntryContent::File(content) => {
                 progress.add_file(content.len() as u64);
                 if let Err(e) = std::fs::write(path, content) {

@@ -39,20 +39,12 @@ impl Command {
                 rom_path,
                 output_path,
                 rom_version,
-            } => shin_rom::actions::rom_extract(
-                rom_path,
-                output_path,
-                rom_version.map(|v| v.rom_version()),
-            ),
+            } => shin_rom::rom_extract(rom_path, output_path, rom_version.map(|v| v.rom_version())),
             Command::Create {
                 source_directory,
                 output_path,
                 rom_version,
-            } => shin_rom::actions::rom_create(
-                source_directory,
-                output_path,
-                rom_version.rom_version(),
-            ),
+            } => shin_rom::rom_create(source_directory, output_path, rom_version.rom_version()),
         }
     }
 }

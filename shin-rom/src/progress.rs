@@ -1,3 +1,5 @@
+//! Progress reporting utilities.
+
 use std::time::Instant;
 
 use indicatif::ProgressStyle;
@@ -62,6 +64,9 @@ impl RomTimingSummary {
     }
 }
 
+/// Manages two spans that display progress of ROM processing: file-wise and byte-wise.
+///
+/// This is useful because, depending on file size, the bottleneck is either the number of files or the total size of files, and typical game roms contain both large and small files.
 pub struct RomProgress {
     running_counter: RomCounter,
     file_progress_span: EnteredSpan,
@@ -111,6 +116,7 @@ pub fn default_spinner_style() -> ProgressStyle {
     ProgressStyle::with_template("{span_child_prefix}{spinner} {span_name}").unwrap()
 }
 
+/// Create a [`tracing::Span`] that will be displayed as a spinner in the terminal thanks to [`tracing_indicatif`].
 #[macro_export]
 macro_rules! default_spinner_span {
     ($name:expr) => {{

@@ -120,21 +120,26 @@ pub enum RomVersion {
     Rom2V1_1,
 }
 
+/// Describes how the text is encoded in a particular version
 #[derive(Debug, Copy, Clone, Ord, PartialOrd, Eq, PartialEq)]
 pub enum RomEncoding {
     Utf8,
     ShiftJIS,
 }
 
+/// Describes how the directory offset is calculated in a particular version
 #[derive(Debug, Copy, Clone, Ord, PartialOrd, Eq, PartialEq)]
 pub enum RomDirectoryOffsetDisposition {
+    /// From start of the ROM file
     FromStart,
+    /// From start of the index in the ROM file
     FromIndexStart,
 }
 
 impl RomVersion {
     pub const HEAD_BYTES_SIZE: usize = 8;
 
+    /// Detects the version of the ROM file from the first 8 bytes and panics if it's unknown
     pub fn detect(head_bytes: &[u8; Self::HEAD_BYTES_SIZE]) -> Self {
         match Self::try_detect(head_bytes) {
             Some(version) => version,
@@ -142,6 +147,7 @@ impl RomVersion {
         }
     }
 
+    /// Tries to detect the version of the ROM file from the first 8 bytes
     pub fn try_detect(head_bytes: &[u8; Self::HEAD_BYTES_SIZE]) -> Option<Self> {
         assert_eq!(Self::HEAD_BYTES_SIZE, 8);
         let h = head_bytes;
@@ -156,6 +162,7 @@ impl RomVersion {
         })
     }
 
+    /// Returns the 8-byte header that is present at the beginning of every ROM file of this version
     pub fn head_bytes(&self) -> [u8; Self::HEAD_BYTES_SIZE] {
         use RomVersion::*;
         match self {
