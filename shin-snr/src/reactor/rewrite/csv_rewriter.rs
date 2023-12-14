@@ -3,7 +3,7 @@ use std::{collections::HashMap, io};
 use bumpalo::Bump;
 use serde::{de, Deserialize};
 
-use crate::reactor::{rewrite::Rewriter, StringSource};
+use crate::reactor::{rewrite::StringRewriter, StringSource};
 
 #[derive(Deserialize)]
 #[serde(rename_all = "snake_case")]
@@ -93,20 +93,20 @@ impl CsvRewriter {
     }
 }
 
-impl Rewriter for CsvRewriter {
-    fn rewrite_string<'bump>(
-        &self,
-        bump: &'bump Bump,
+impl StringRewriter for CsvRewriter {
+    fn rewrite_string<'a>(
+        &'a self,
+        _bump: &'a Bump,
         instr_index: u32,
         instr_offset: u32,
         source: StringSource,
-    ) -> Option<bumpalo::collections::String<'bump>> {
+    ) -> Option<&'a str> {
         let entry = self.entries.get(&instr_index)?;
         assert_eq!(entry.offset, instr_offset);
         assert_eq!(entry.source, source);
 
         let rewrite = entry.translated.as_deref().unwrap_or(entry.s.as_str());
 
-        Some(bumpalo::collections::String::from_str_in(rewrite, bump))
+        Some(rewrite)
     }
 }

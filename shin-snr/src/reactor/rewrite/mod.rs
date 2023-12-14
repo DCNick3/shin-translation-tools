@@ -3,10 +3,7 @@ mod x_rewriter;
 
 use std::{collections::HashMap, io};
 
-use bumpalo::{
-    collections::{String, Vec},
-    Bump,
-};
+use bumpalo::{collections::Vec, Bump};
 use shin_text::encode_sjis_zstring;
 
 pub use self::{csv_rewriter::CsvRewriter, x_rewriter::XRewriter};
@@ -53,24 +50,24 @@ impl OffsetMap {
     }
 }
 
-pub trait Rewriter {
-    fn rewrite_string<'bump>(
-        &self,
-        bump: &'bump Bump,
+pub trait StringRewriter {
+    fn rewrite_string<'a>(
+        &'a self,
+        bump: &'a Bump,
         instr_index: u32,
         instr_offset: u32,
         source: StringSource,
-    ) -> Option<String<'bump>>;
+    ) -> Option<&'a str>;
 }
 
-impl Rewriter for () {
+impl StringRewriter for () {
     fn rewrite_string<'bump>(
         &self,
         _bump: &'bump Bump,
         _instr_index: u32,
         _instr_offset: u32,
         _source: StringSource,
-    ) -> Option<String<'bump>> {
+    ) -> Option<&'bump str> {
         None
     }
 }
@@ -148,14 +145,68 @@ impl<W: io::Write> RewriteMode for EmitMode<W> {
     fn instr_start(&mut self, _in_offset: u32) {}
 }
 
-pub struct RewriteReactor<'a, L, M> {
-    reader: Reader<'a>,
+struct Stringer<R> {
+    bump: Bump,
+    rewriter: R,
+}
+
+impl<R> Stringer<R> {
+    pub fn reset(mut self) -> Self {
+        self.bump.reset();
+        self
+    }
+}
+
+impl<R: StringRewriter> Stringer<R> {
+    /// Rewrites a string using the rewriter.
+    ///
+    /// The string may not actually be rewritten if the rewriter returns None.
+    ///
+    /// Expects the original string to be encoded in Shift-JIS and to be zero-terminated
+    fn rewrite_string<'s>(
+        &'s self,
+        position: &mut Position,
+        fixup: bool,
+        original: &'s [u8],
+        source: StringSource,
+    ) -> &[u8] {
+        assert_eq!(
+            original.last().copied(),
+            Some(0),
+            "string is not zero-terminated"
+        );
+
+        let result = if let Some(s) = self.rewriter.rewrite_string(
+            &self.bump,
+            position.current_str_index,
+            position.current_instr_offset,
+            source,
+        ) {
+            encode_sjis_zstring(&self.bump, &s, fixup)
+                .unwrap()
+                .into_bump_slice()
+        } else {
+            original
+        };
+
+        position.current_str_index += 1;
+
+        result
+    }
+}
+
+#[derive(Default)]
+struct Position {
     current_instr_index: u32,
     current_str_index: u32,
     current_instr_offset: u32,
-    rewriter: L,
+}
+
+pub struct RewriteReactor<'a, R, M> {
+    reader: Reader<'a>,
+    position: Position,
+    stringer: Stringer<R>,
     mode: M,
-    bump: Bump,
 }
 
 impl<'a, R> RewriteReactor<'a, R, BuildOffsetMapMode> {
@@ -163,37 +214,36 @@ impl<'a, R> RewriteReactor<'a, R, BuildOffsetMapMode> {
         let initial_in_position = reader.position();
         Self {
             reader,
-            current_instr_index: 0,
-            current_str_index: 0,
-            current_instr_offset: 0,
-            rewriter,
+            position: Default::default(),
+            stringer: Stringer {
+                bump: Bump::new(),
+                rewriter,
+            },
             mode: BuildOffsetMapMode {
                 builder: OffsetMapBuilder::new(),
                 initial_in_position,
                 out_position: initial_out_position,
                 instr_index: 0,
             },
-            bump: Bump::new(),
         }
     }
 
     pub fn into_emit<W>(self, writer: W) -> RewriteReactor<'a, R, EmitMode<W>> {
         RewriteReactor {
             reader: self.reader.rewind(self.mode.initial_in_position),
-            current_instr_index: 0,
-            current_str_index: 0,
-            current_instr_offset: 0,
-            rewriter: self.rewriter,
+            position: Default::default(),
+            stringer: self.stringer.reset(),
             mode: EmitMode {
                 map: self.mode.builder.build(),
                 writer,
             },
-            bump: self.bump,
         }
     }
 }
 
-impl<'a, R: Rewriter, M: RewriteMode> Reactor for RewriteReactor<'a, R, M> {
+impl<'a, R: StringRewriter, M: RewriteMode> RewriteReactor<'a, R, M> {}
+
+impl<'a, R: StringRewriter, M: RewriteMode> Reactor for RewriteReactor<'a, R, M> {
     fn byte(&mut self) -> u8 {
         self.mode.byte(self.reader.byte())
     }
@@ -216,22 +266,9 @@ impl<'a, R: Rewriter, M: RewriteMode> Reactor for RewriteReactor<'a, R, M> {
         // TODO: possible optimization: we don't have to actually encode the string during the map building phase
         // we only care about the size of the string and we have measure_sjis_string for that
 
-        // a poor's man Cow for bumpalo
-        // implementing this a separate data type can reduce the amount of duplication
-        let mut c = None;
-        let s = if let Some(s) = self.rewriter.rewrite_string(
-            &self.bump,
-            self.current_str_index,
-            self.current_instr_offset,
-            source,
-        ) {
-            c = Some(encode_sjis_zstring(&self.bump, &s, fixup).unwrap());
-            c.as_deref().unwrap()
-        } else {
-            s
-        };
-
-        self.current_str_index += 1;
+        let s = self
+            .stringer
+            .rewrite_string(&mut self.position, fixup, s, source);
 
         self.mode.byte(s.len() as u8);
         self.mode.write(s);
@@ -240,56 +277,32 @@ impl<'a, R: Rewriter, M: RewriteMode> Reactor for RewriteReactor<'a, R, M> {
     fn u16string(&mut self, fixup: bool, source: StringSource) {
         let s = self.reader.u16string();
 
-        // a poor's man Cow for bumpalo
-        let mut c = None;
-        let s = if let Some(s) = self.rewriter.rewrite_string(
-            &self.bump,
-            self.current_str_index,
-            self.current_instr_offset,
-            source,
-        ) {
-            c = Some(encode_sjis_zstring(&self.bump, &s, fixup).unwrap());
-            c.as_deref().unwrap()
-        } else {
-            s
-        };
-
-        self.current_str_index += 1;
+        let s = self
+            .stringer
+            .rewrite_string(&mut self.position, fixup, s, source);
 
         self.mode.short(s.len() as u16);
         self.mode.write(s);
     }
 
     fn u8string_array(&mut self, fixup: bool, source: StringArraySource) {
-        let mut s = self.reader.u8string_array();
-        while s.last() == Some(&0) {
-            s = &s[..s.len() - 1];
-        }
+        let s = self
+            .reader
+            .u8string_array()
+            // strip only the array zero terminator
+            .strip_suffix(&[0])
+            .expect("string array is not zero-terminated");
 
         let source_maker = match source {
             StringArraySource::Select => StringSource::SelectChoice,
         };
 
-        let mut res = Vec::new_in(&self.bump);
-        for (i, s) in s.split(|&v| v == 0).enumerate() {
-            if let Some(s) = self.rewriter.rewrite_string(
-                &self.bump,
-                self.current_str_index,
-                self.current_instr_offset,
-                source_maker(i as u32),
-            ) {
-                // encode_sjis_zstring already adds a NUL terminator
-                res.extend_from_slice(
-                    encode_sjis_zstring(&self.bump, &s, fixup)
-                        .unwrap()
-                        .as_slice(),
-                );
-            } else {
-                res.extend_from_slice(s);
-                res.push(0);
-            }
-
-            self.current_str_index += 1;
+        let mut res = Vec::new_in(&self.stringer.bump);
+        for (i, s) in s.split_inclusive(|&v| v == 0).enumerate() {
+            let s =
+                self.stringer
+                    .rewrite_string(&mut self.position, fixup, s, source_maker(i as u32));
+            res.extend_from_slice(s);
         }
         res.push(0);
 
@@ -298,35 +311,23 @@ impl<'a, R: Rewriter, M: RewriteMode> Reactor for RewriteReactor<'a, R, M> {
     }
 
     fn u16string_array(&mut self, fixup: bool, source: StringArraySource) {
-        let mut s = self.reader.u16string_array();
-        while s.last() == Some(&0) {
-            s = &s[..s.len() - 1];
-        }
+        let s = self
+            .reader
+            .u16string_array()
+            // strip only the array zero terminator
+            .strip_suffix(&[0])
+            .expect("string array is not zero-terminated");
 
         let source_maker = match source {
             StringArraySource::Select => StringSource::SelectChoice,
         };
 
-        let mut res = Vec::new_in(&self.bump);
-        for (i, s) in s.split(|&v| v == 0).enumerate() {
-            if let Some(s) = self.rewriter.rewrite_string(
-                &self.bump,
-                self.current_str_index,
-                self.current_instr_offset,
-                source_maker(i as u32),
-            ) {
-                // encode_sjis_zstring already adds a NUL terminator
-                res.extend_from_slice(
-                    encode_sjis_zstring(&self.bump, &s, fixup)
-                        .unwrap()
-                        .as_slice(),
-                );
-            } else {
-                res.extend_from_slice(s);
-                res.push(0);
-            }
-
-            self.current_str_index += 1;
+        let mut res = Vec::new_in(&self.stringer.bump);
+        for (i, s) in s.split_inclusive(|&v| v == 0).enumerate() {
+            let s =
+                self.stringer
+                    .rewrite_string(&mut self.position, fixup, s, source_maker(i as u32));
+            res.extend_from_slice(s);
         }
         res.push(0);
 
@@ -339,19 +340,19 @@ impl<'a, R: Rewriter, M: RewriteMode> Reactor for RewriteReactor<'a, R, M> {
     }
 
     fn instr_start(&mut self) {
-        self.current_instr_offset = self.reader.position();
+        self.position.current_instr_offset = self.reader.position();
         self.mode.instr_start(self.reader.position());
     }
 
     fn instr_end(&mut self) {
-        self.current_instr_index += 1;
+        self.position.current_instr_index += 1;
     }
 
     fn has_instr(&self) -> bool {
         self.reader.has_instr()
     }
 
-    fn debug_loc(&self) -> std::string::String {
+    fn debug_loc(&self) -> String {
         format!("{:08x}", self.reader.position())
     }
 }

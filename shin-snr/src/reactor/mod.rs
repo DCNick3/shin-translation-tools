@@ -27,7 +27,7 @@ pub trait Reactor {
 pub enum StringSource {
     Saveinfo,
     Select,
-    // TODO: this should really go into a separate file
+    // TODO: this should really go into a separate enum
     SelectChoice(u32),
     Msgset(u32),
     Dbgout,

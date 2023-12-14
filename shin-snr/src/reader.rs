@@ -40,26 +40,40 @@ impl<'a> Reader<'a> {
         u32::from_le_bytes(self.take(4).try_into().unwrap())
     }
 
+    /// Reacts to a string prefixed with u8 length. The returned string is not decoded to utf-8. Zero terminator is included in the returned slice.
     pub fn u8string(&mut self) -> &[u8] {
         let len = self.byte();
         self.take(len as usize)
     }
 
+    /// Reacts to a string prefixed with u16 length. The returned string is not decoded to utf-8. Zero terminator is included in the returned slice.
     pub fn u16string(&mut self) -> &[u8] {
         let len = self.short();
         self.take(len as usize)
     }
 
+    /// Reacts to a string array prefixed with u8 length. Zero terminators are included in the returned slice.
+    ///
+    /// String array consists of zero-terminated strings written back-to-back. The array itself is also zero-terminated.
+    ///
+    /// Example: "foo\0bar\0baz\0\0" -> ["foo", "bar", "baz"]
     pub fn u8string_array(&mut self) -> &[u8] {
         let len = self.byte();
         self.take(len as usize)
     }
+
+    /// Reacts to a string array prefixed with u16 length. Zero terminators are included in the returned slice.
+    ///
+    /// String array consists of zero-terminated strings written back-to-back. The array itself is also zero-terminated.
+    ///
+    /// Example: "foo\0bar\0baz\0\0" -> ["foo", "bar", "baz"]
     pub fn u16string_array(&mut self) -> &[u8] {
         let len = self.short();
         self.take(len as usize)
     }
 
     pub fn msgid(&mut self) -> u32 {
+        // TODO: differs between versions. should this be named smth like u24?
         let data = self.take(3);
         u32::from_le_bytes([data[0], data[1], data[2], 0])
     }

@@ -19,17 +19,14 @@ pub struct DirectoryIterCtx<'rom> {
     pub rom: &'rom [u8],
 }
 
-pub struct DirectoryIter<'rom, 'ctx> {
-    ctx: &'ctx DirectoryIterCtx<'rom>,
+pub struct DirectoryIter<'a> {
+    ctx: &'a DirectoryIterCtx<'a>,
     start_offset: usize,
-    cur: io::Cursor<&'rom [u8]>,
+    cur: io::Cursor<&'a [u8]>,
 }
 
-impl<'rom, 'ctx> DirectoryIter<'rom, 'ctx> {
-    pub fn new(
-        ctx: &'ctx DirectoryIterCtx<'rom>,
-        start_offset: usize,
-    ) -> DirectoryIter<'rom, 'ctx> {
+impl<'a> DirectoryIter<'a> {
+    pub fn new(ctx: &'a DirectoryIterCtx<'a>, start_offset: usize) -> DirectoryIter<'a> {
         let count = u32::from_le_bytes(*array_ref![ctx.index, start_offset, 4]);
         let cur =
             io::Cursor::new(&ctx.index[start_offset + 4..][..count as usize * RawEntry::SIZE]);
@@ -42,8 +39,8 @@ impl<'rom, 'ctx> DirectoryIter<'rom, 'ctx> {
     }
 }
 
-impl<'rom, 'ctx> Iterator for DirectoryIter<'rom, 'ctx> {
-    type Item = Entry<'rom, 'ctx>;
+impl<'a> Iterator for DirectoryIter<'a> {
+    type Item = Entry<'a>;
 
     fn next(&mut self) -> Option<Self::Item> {
         loop {
@@ -64,13 +61,14 @@ impl<'rom, 'ctx> Iterator for DirectoryIter<'rom, 'ctx> {
             }
 
             let name = match self.ctx.version.encoding() {
-                RomEncoding::Utf8 => shin_text::Cow::Borrowed(
-                    std::str::from_utf8(name).expect("invalid utf8 in rom filename"),
-                ),
-                RomEncoding::ShiftJIS => shin_text::Cow::Owned(
+                RomEncoding::Utf8 => {
+                    std::str::from_utf8(name).expect("invalid utf8 in rom filename")
+                }
+                RomEncoding::ShiftJIS => {
                     shin_text::decode_sjis_zstring(&self.ctx.bump, name, false)
-                        .expect("invalid shift-jis in rom filename"),
-                ),
+                        .expect("invalid shift-jis in rom filename")
+                        .into_bump_str()
+                }
             };
 
             let offset_multiplier = if entry.name_and_flags.is_directory() {
@@ -125,14 +123,14 @@ impl RawEntry {
     pub const SIZE: usize = 0xc;
 }
 
-pub struct Entry<'rom, 'bump> {
-    pub name: shin_text::Cow<'bump, 'rom, str>,
-    pub content: EntryContent<'rom, 'bump>,
+pub struct Entry<'a> {
+    pub name: &'a str,
+    pub content: EntryContent<'a>,
 }
 
-pub enum EntryContent<'rom, 'bump> {
-    File(&'rom [u8]),
-    Directory(DirectoryIter<'rom, 'bump>),
+pub enum EntryContent<'a> {
+    File(&'a [u8]),
+    Directory(DirectoryIter<'a>),
 }
 
 // this could be made into a proper iterator, but:
