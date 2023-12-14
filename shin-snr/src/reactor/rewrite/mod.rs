@@ -12,6 +12,7 @@ use crate::{
     reader::Reader,
 };
 
+#[derive(Default)]
 pub struct OffsetMapBuilder {
     orig_to_idx: HashMap<u32, u32>,
     idx_to_out: HashMap<u32, u32>,
@@ -19,10 +20,7 @@ pub struct OffsetMapBuilder {
 
 impl OffsetMapBuilder {
     pub fn new() -> Self {
-        Self {
-            orig_to_idx: HashMap::new(),
-            idx_to_out: HashMap::new(),
-        }
+        Default::default()
     }
 
     pub fn build(self) -> OffsetMap {
@@ -34,15 +32,14 @@ impl OffsetMapBuilder {
     }
 }
 
+#[derive(Default)]
 pub struct OffsetMap {
     map: HashMap<u32, u32>,
 }
 
 impl OffsetMap {
     pub fn new() -> Self {
-        Self {
-            map: HashMap::new(),
-        }
+        Default::default()
     }
 
     pub fn get(&self, in_offset: u32) -> Option<u32> {
@@ -182,7 +179,7 @@ impl<R: StringRewriter> Stringer<R> {
             position.current_instr_offset,
             source,
         ) {
-            encode_sjis_zstring(&self.bump, &s, fixup)
+            encode_sjis_zstring(&self.bump, s, fixup)
                 .unwrap()
                 .into_bump_slice()
         } else {

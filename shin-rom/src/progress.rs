@@ -117,7 +117,7 @@ macro_rules! default_spinner_span {
         let span = tracing::info_span!($name);
         tracing_indicatif::span_ext::IndicatifSpanExt::pb_set_style(
             &span,
-            &crate::progress::default_spinner_style(),
+            &$crate::progress::default_spinner_style(),
         );
         span.entered()
     }};

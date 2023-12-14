@@ -49,7 +49,6 @@ impl RomVersionSpecifier {
                 .iter()
                 .find_map(|&x| x.to_possible_value()?.matches(&v, true).then_some(x))
                 .unwrap()
-                .clone()
         })
     }
 }

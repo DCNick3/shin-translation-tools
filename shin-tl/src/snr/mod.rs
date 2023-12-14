@@ -1,6 +1,6 @@
 use std::{
     fs::File,
-    io::{BufWriter, Seek, SeekFrom, Write},
+    io::{BufWriter, Seek, Write},
 };
 
 use camino::Utf8PathBuf;
@@ -136,7 +136,7 @@ impl Command {
                     .into_inner()
                     .expect("Flushing the output file failed");
                 let current_size = output
-                    .seek(SeekFrom::Current(0))
+                    .stream_position()
                     .expect("Getting the current file size failed");
                 let padding = current_size.next_multiple_of(16) - current_size;
                 output

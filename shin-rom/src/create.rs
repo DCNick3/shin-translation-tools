@@ -82,7 +82,7 @@ impl<'bump, S, DV: DirVisitor<'bump, S>> FsWalker<'bump, S> for DirVisitorAdapte
         directory: &InputDirectory<'bump, S>,
     ) {
         // special case: root directory
-        if self.visit_root == true {
+        if self.visit_root {
             self.visitor
                 .visit_directory(self.directory_index, "", &[], path_buf, directory);
             self.directory_index += 1;
@@ -251,7 +251,7 @@ impl<'bump, 'a> InputDirectory<'bump, BaseDirFileSource<'a>> {
                 let name = String::from_str_in(file_name, bump).into_bump_str();
                 let encoded_name = match encoding {
                     RomEncoding::Utf8 => name.as_bytes(),
-                    RomEncoding::ShiftJIS => encode_sjis_string(&bump, name, false)
+                    RomEncoding::ShiftJIS => encode_sjis_string(bump, name, false)
                         .expect("filename not encodable in Shift-JIS")
                         .into_bump_slice(),
                 };
@@ -916,9 +916,9 @@ pub fn rom_write<'bump, S: FileSource, W: io::Write>(
                 index_offset: allocated.index_offset,
                 file_offset_multiplier: RomHeader::default_file_offset_multiplier(rom_version)
                     as u64,
-                directory_positions: &allocated.directory_positions,
-                file_positions: &allocated.file_positions,
-                directory_parent_indices: &allocated.directory_parent_indices,
+                directory_positions: allocated.directory_positions,
+                file_positions: allocated.file_positions,
+                directory_parent_indices: allocated.directory_parent_indices,
                 directory_index: 1, // to compensate for the root directory
                 file_index: 0,
                 writer: &mut writer,
@@ -935,7 +935,7 @@ pub fn rom_write<'bump, S: FileSource, W: io::Write>(
             input,
             WriteFileVisitor {
                 file_offset_multiplier: allocated.file_offset_multiplier,
-                file_positions: &allocated.file_positions,
+                file_positions: allocated.file_positions,
                 writer: &mut writer,
                 progress: &mut progress,
             },

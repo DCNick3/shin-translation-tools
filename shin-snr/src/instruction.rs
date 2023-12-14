@@ -3,7 +3,10 @@ use crate::{
     reactor::{Reactor, StringArraySource, StringSource},
 };
 
-#[allow(non_camel_case_types)]
+// we break the rust naming rules in order to
+// 1. match game's COMMAND names
+// 2. distinguish instructions (lowercase) from commands (UPPERCASE)
+#[allow(non_camel_case_types, clippy::upper_case_acronyms)]
 #[derive(Debug, Copy, Clone)]
 pub enum Instruction {
     // Instructions

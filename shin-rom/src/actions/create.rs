@@ -27,7 +27,7 @@ pub fn rom_create(source_directory: Utf8PathBuf, output_path: Utf8PathBuf, versi
         rom_allocate(&bump, version, &source_directory)
     };
 
-    let output_file = std::fs::File::create(&output_path).expect("Failed to create output file");
+    let output_file = std::fs::File::create(output_path).expect("Failed to create output file");
     let mut output_writer = BufWriter::new(output_file);
 
     let total_count = rom_write(version, &source_directory, &allocated, &mut output_writer)

@@ -139,8 +139,8 @@ pub enum EntryContent<'a> {
 pub fn walk_rom<F: FnMut(&str, &EntryContent)>(ctx: &DirectoryIterCtx, mut f: F) {
     fn recur<F: FnMut(&str, &EntryContent)>(f: &mut F, path_buf: &mut String, iter: DirectoryIter) {
         for entry in iter {
-            path_buf.push_str(&entry.name);
-            f(&path_buf, &entry.content);
+            path_buf.push_str(entry.name);
+            f(path_buf, &entry.content);
             match entry.content {
                 EntryContent::File(_) => {}
                 EntryContent::Directory(iter) => {
@@ -153,12 +153,12 @@ pub fn walk_rom<F: FnMut(&str, &EntryContent)>(ctx: &DirectoryIterCtx, mut f: F)
         }
     }
 
-    recur(&mut f, &mut String::new(), DirectoryIter::new(&ctx, 0));
+    recur(&mut f, &mut String::new(), DirectoryIter::new(ctx, 0));
 }
 
 pub fn rom_count_total(ctx: &DirectoryIterCtx) -> RomCounter {
     let mut counter = RomCounter::new();
-    walk_rom(&ctx, |_, entry| {
+    walk_rom(ctx, |_, entry| {
         if let EntryContent::File(file) = entry {
             counter.add_file(file.len() as u64);
         }
