@@ -14,7 +14,7 @@ As a starting point I'm targeting the "AstralAir no Shiroki Towa -White Eternity
 ## Features
 
 - Extraction and compilation of ROM files compatible with, AFAIK, all* versions of the engine
-- Translation of the game script (SNR files). For now, only for `white-eternity` version of the engine, more to come
+- Translation of the game script (SNR files). See [game support](#game-support) section to find out which games are supported
 
 \* except for PS2 versions, which embed rom files directly onto the disc
 
@@ -53,6 +53,12 @@ shin-tl generate-completion powershell >> $PROFILE
 ```
 
 Then re-start the shell or source the generated file
+
+## Game support
+
+Although ROM files are supported for all versions of the engine, the SNR translation tool requires support for each game separately. See "shin-tl snr support" column in [this spreadsheet](https://docs.google.com/spreadsheets/d/1wGX9FOQq_iXcWMnY9qITCAV7hq1R7_gpWwjkT4_tKDI/edit#gid=0) to find out which games are supported. 
+
+Af of writing this readme, vita version of "AstralAir no Shiroki Towa -White Eternity-" and switch version of "D.C.4 -Da Capo 4-" are supported.
 
 ## Usage
 
@@ -96,7 +102,7 @@ shin-tl snr read <engine-version> <main.snr> <strings.csv>
 
 The format of the SNR files varies greatly with the engine version, and it does not contain any indicators as to which version it is. Thus, you need to supply the engine version to the tool.
 
-As of now, only AstralAir no Shiroki Towa -White Eternity- is supported, so it should be `white-eternity`.
+See "shin-tl name" column of [this spreadsheet](https://docs.google.com/spreadsheets/d/1wGX9FOQq_iXcWMnY9qITCAV7hq1R7_gpWwjkT4_tKDI/edit#gid=0) corresponding ti your game to find out what to put here.
 
 The `strings.csv` file will contain the extracted strings. It can be edited with a spreadsheet editor like Excel or LibreOffice Calc.
 
