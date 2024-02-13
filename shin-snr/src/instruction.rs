@@ -1,3 +1,5 @@
+use shin_versions::ShinVersion;
+
 use crate::{
     ctx::Ctx,
     reactor::{Reactor, StringArraySource, StringSource},
@@ -44,6 +46,11 @@ pub enum Instruction {
     call,
     /// Return from function
     r#return,
+    /// Inverted get table (index of matching entry in table)
+    igt,
+
+    /// Get the character ID corresponding to the passed Bustup info
+    getbupid,
 
     // Commands
     // they yield to the game loop and are what affects the game state
@@ -58,12 +65,14 @@ pub enum Instruction {
     MSGSET,
     MSGWAIT,
     MSGSIGNAL,
+    MSGSYNC,
     MSGCLOSE,
     MSGFACE,
     LOGSET,
     SELECT,
     WIPE,
     WIPEWAIT,
+
     BGMPLAY,
     BGMSTOP,
     BGMVOL,
@@ -77,19 +86,38 @@ pub enum Instruction {
     SEWAIT,
     SEONCE,
     VOICEPLAY,
+    VOICESTOP,
     VOICEWAIT,
+
     SAVEINFO,
     AUTOSAVE,
     EVBEGIN,
     EVEND,
+    RESUMESET,
+    RESUME,
+
     TROPHY,
+    UNLOCK,
+
     LAYERINIT,
     LAYERLOAD,
     LAYERUNLOAD,
     LAYERCTRL,
     LAYERWAIT,
+    LAYERSWAP,
     LAYERSELECT,
     MOVIEWAIT,
+    // "new" plane-related commands
+    TRANSSET,
+    TRANSWAIT,
+    PAGEBACK,
+    PLANESELECT,
+    PLANECLEAR,
+    MASKLOAD,
+    MASKUNLOAD,
+
+    // Game-specific commands
+    // White Eternity
     CHARCLEAR,
     CHARLOAD,
     CHARUNLOAD,
@@ -98,104 +126,202 @@ pub enum Instruction {
     CHARWAIT,
     CHARMARK,
     CHARSYNC,
+
+    // DC4
+    CHATSET,
+
     DEBUGOUT,
 }
 
-pub fn decode_instr(opcode: u8) -> Option<Instruction> {
+pub fn decode_instr(version: ShinVersion, opcode: u8) -> Option<Instruction> {
     use Instruction::*;
-    Some(match opcode {
-        0x00 => EXIT,
+    // TODO: those can probably be smartly merged (need to gather some data first though)
+    match version {
+        ShinVersion::WhiteEternity => {
+            Some(match opcode {
+                0x00 => EXIT,
 
-        // ===
-        // Instructions
-        0x40 => uo,
-        0x41 => bo,
-        0x42 => exp,
-        0x43 => mm,
-        0x44 => gt,
-        0x45 => st,
-        0x46 => jc,
-        0x47 => j,
-        0x48 => gosub,
-        0x49 => retsub,
-        0x4a => jt,
-        0x4b => gosubt,
-        0x4c => rnd,
-        0x4d => push,
-        0x4e => pop,
-        0x4f => call,
-        0x50 => r#return,
-        0x51 => todo!(),
-        0x52 => todo!(),
+                // ===
+                // Instructions
+                0x40 => uo,
+                0x41 => bo,
+                0x42 => exp,
+                0x43 => mm,
+                0x44 => gt,
+                0x45 => st,
+                0x46 => jc,
+                0x47 => j,
+                0x48 => gosub,
+                0x49 => retsub,
+                0x4a => jt,
+                0x4b => gosubt,
+                0x4c => rnd,
+                0x4d => push,
+                0x4e => pop,
+                0x4f => call,
+                0x50 => r#return,
+                0x51 => todo!(),
+                0x52 => todo!(),
 
-        // ===
-        // Commands
-        0x81 => SGET,
-        0x82 => SSET,
-        0x83 => WAIT,
-        0x84 => return None,
-        0x85 => MSGINIT,
-        0x86 => return None,
-        // NOTE: !!!!
-        // Umineko has this opcode as 0x86
-        // something was probably shifted, should check it
-        0x87 => MSGSET,
-        0x88 => MSGWAIT,
-        0x89 => MSGSIGNAL,
-        0x8a => MSGCLOSE,
-        // Missing in umineko!
-        0x8b => MSGFACE,
-        // ¿missing? in umi?
-        0x8c => LOGSET,
-        0x8d => SELECT,
-        0x8e => WIPE,
-        0x8f => WIPEWAIT,
+                // ===
+                // Commands
+                0x81 => SGET,
+                0x82 => SSET,
+                0x83 => WAIT,
+                0x84 => return None,
+                0x85 => MSGINIT,
+                0x86 => return None,
+                // NOTE: !!!!
+                // Umineko has this opcode as 0x86
+                // something was probably shifted, should check it
+                0x87 => MSGSET,
+                0x88 => MSGWAIT,
+                0x89 => MSGSIGNAL,
+                0x8a => MSGCLOSE,
+                // Missing in umineko!
+                0x8b => MSGFACE,
+                // ¿missing? in umi?
+                0x8c => LOGSET,
+                0x8d => SELECT,
+                0x8e => WIPE,
+                0x8f => WIPEWAIT,
 
-        // NOTE: this block was not checked against umineko
-        0x90 => BGMPLAY,
-        0x91 => BGMSTOP,
-        0x92 => BGMVOL,
-        0x93 => BGMWAIT,
-        0x94 => BGMSYNC,
-        0x95 => SEPLAY,
-        0x96 => SESTOP,
-        0x97 => SESTOPALL,
-        0x98 => SEVOL,
-        0x99 => SEPAN,
-        0x9a => SEWAIT,
-        0x9b => SEONCE,
-        0x9c => VOICEPLAY,
-        0x9d => VOICEWAIT,
+                // NOTE: this block was not checked against umineko
+                0x90 => BGMPLAY,
+                0x91 => BGMSTOP,
+                0x92 => BGMVOL,
+                0x93 => BGMWAIT,
+                0x94 => BGMSYNC,
+                0x95 => SEPLAY,
+                0x96 => SESTOP,
+                0x97 => SESTOPALL,
+                0x98 => SEVOL,
+                0x99 => SEPAN,
+                0x9a => SEWAIT,
+                0x9b => SEONCE,
+                0x9c => VOICEPLAY,
+                0x9d => VOICEWAIT,
 
-        0xa0 => SAVEINFO,
-        0xa1 => AUTOSAVE,
-        0xa2 => EVBEGIN,
-        0xa3 => EVEND,
+                0xa0 => SAVEINFO,
+                0xa1 => AUTOSAVE,
+                0xa2 => EVBEGIN,
+                0xa3 => EVEND,
 
-        0xb0 => TROPHY,
+                0xb0 => TROPHY,
 
-        0xc0 => LAYERINIT,
-        0xc1 => LAYERLOAD,
-        0xc2 => LAYERUNLOAD,
-        0xc3 => LAYERCTRL,
-        0xc4 => LAYERWAIT,
-        0xc7 => LAYERSELECT,
-        0xc8 => MOVIEWAIT,
+                0xc0 => LAYERINIT,
+                0xc1 => LAYERLOAD,
+                0xc2 => LAYERUNLOAD,
+                0xc3 => LAYERCTRL,
+                0xc4 => LAYERWAIT,
+                // TODO: why is there a hole here?
+                0xc7 => LAYERSELECT,
+                0xc8 => MOVIEWAIT,
 
-        // ==
-        // these commands are not present in umineko at all
-        0xd0 => CHARCLEAR,
-        0xd1 => CHARLOAD,
-        0xd2 => CHARUNLOAD,
-        0xd3 => CHARDISP,
-        0xd4 => CHARCTRL,
-        0xd5 => CHARWAIT,
-        0xd6 => CHARMARK,
-        0xd7 => CHARSYNC,
+                // ==
+                // these commands are not present in umineko at all
+                0xd0 => CHARCLEAR,
+                0xd1 => CHARLOAD,
+                0xd2 => CHARUNLOAD,
+                0xd3 => CHARDISP,
+                0xd4 => CHARCTRL,
+                0xd5 => CHARWAIT,
+                0xd6 => CHARMARK,
+                0xd7 => CHARSYNC,
 
-        0xff => DEBUGOUT,
-        _ => return None,
-    })
+                0xff => DEBUGOUT,
+                _ => return None,
+            })
+        }
+        ShinVersion::DC4 => Some(match opcode {
+            0x00 => EXIT,
+            0x40 => uo,
+            0x41 => bo,
+            0x42 => exp,
+            0x43 => mm,
+            0x44 => gt,
+            0x45 => st,
+            0x46 => jc,
+            0x47 => j,
+            0x48 => gosub,
+            0x49 => retsub,
+            0x4a => jt,
+            0x4b => gosubt,
+            0x4c => rnd,
+            0x4d => push,
+            0x4e => pop,
+            0x4f => call,
+            0x50 => r#return,
+            0x51 => igt,
+            // also present in umineko, but, thankfully, not used
+            0x53 => getbupid,
+            //
+            0x81 => SGET,
+            0x82 => SSET,
+            0x83 => WAIT,
+            // 0x84 unused
+            0x85 => MSGINIT,
+            0x86 => MSGSET,
+            0x87 => MSGWAIT,
+            0x88 => MSGSIGNAL,
+            0x89 => MSGSYNC,
+            0x8a => MSGCLOSE,
+            0x8b => MSGFACE,
+            // 0x8c unused
+            0x8d => SELECT,
+            0x8e => WIPE,
+            0x8f => WIPEWAIT,
+            //
+            0x90 => BGMPLAY,
+            0x91 => BGMSTOP,
+            0x92 => BGMVOL,
+            0x93 => BGMWAIT,
+            0x94 => BGMSYNC,
+            0x95 => SEPLAY,
+            0x96 => SESTOP,
+            0x97 => SESTOPALL,
+            0x98 => SEVOL,
+            0x99 => SEPAN,
+            0x9a => SEWAIT,
+            0x9b => SEONCE,
+            0x9c => VOICEPLAY,
+            0x9d => VOICESTOP,
+            0x9e => VOICEWAIT,
+            //
+            0xa0 => SAVEINFO,
+            0xa1 => AUTOSAVE,
+            0xa2 => EVBEGIN,
+            0xa3 => EVEND,
+            0xa4 => RESUMESET,
+            0xa5 => RESUME,
+            //
+            0xb0 => TROPHY,
+            0xb1 => UNLOCK,
+            //
+            0xc0 => LAYERINIT,
+            0xc1 => LAYERLOAD,
+            0xc2 => LAYERUNLOAD,
+            0xc3 => LAYERCTRL,
+            0xc4 => LAYERWAIT,
+            0xc5 => LAYERSWAP,
+            0xc6 => LAYERSELECT,
+            0xc7 => MOVIEWAIT,
+            // 0xc8 unused
+            0xc9 => TRANSSET,
+            0xca => TRANSWAIT,
+            0xcb => PAGEBACK,
+            0xcc => PLANESELECT,
+            0xcd => PLANECLEAR,
+            0xce => MASKLOAD,
+            0xcf => MASKUNLOAD,
+            0xd0 => CHATSET,
+            0xff => DEBUGOUT,
+            _ => return None,
+        }),
+        ShinVersion::Konosuba => {
+            todo!()
+        }
+    }
 }
 
 pub fn react_instr<R: Reactor>(ctx: &mut Ctx<R>, instr: Instruction) {
@@ -249,7 +375,7 @@ pub fn react_instr<R: Reactor>(ctx: &mut Ctx<R>, instr: Instruction) {
             // NOTE: in umineko, these are padded to 4 bytes to allow for seeking
             // with NumberSpecStyle::Short, this is not necessary
             for _ in 0..number_count {
-                ctx.number();
+                ctx.padnumber();
             }
         }
         Instruction::st => {
@@ -280,6 +406,11 @@ pub fn react_instr<R: Reactor>(ctx: &mut Ctx<R>, instr: Instruction) {
                 ctx.offset();
             }
         }
+        Instruction::rnd => {
+            ctx.reg();
+            ctx.number();
+            ctx.number();
+        }
         Instruction::gosubt => {
             ctx.number();
             let offset_count = ctx.short();
@@ -307,6 +438,21 @@ pub fn react_instr<R: Reactor>(ctx: &mut Ctx<R>, instr: Instruction) {
             }
         }
         Instruction::r#return => {}
+        Instruction::igt => {
+            ctx.reg();
+            ctx.number();
+            ctx.number();
+            let number_count = ctx.short();
+            for _ in 0..number_count {
+                ctx.padnumber();
+            }
+        }
+        Instruction::getbupid => {
+            ctx.reg();
+            ctx.number();
+            ctx.number();
+        }
+
         Instruction::EXIT => {
             ctx.byte();
             ctx.number();
@@ -323,22 +469,46 @@ pub fn react_instr<R: Reactor>(ctx: &mut Ctx<R>, instr: Instruction) {
             ctx.byte();
             ctx.number();
         }
-        Instruction::MSGINIT => {
-            ctx.number();
-            ctx.number();
-        }
+        Instruction::MSGINIT => match ctx.version() {
+            ShinVersion::WhiteEternity => {
+                ctx.number();
+                ctx.number();
+            }
+            ShinVersion::DC4 => {
+                ctx.number();
+            }
+            ShinVersion::Konosuba => {
+                todo!()
+            }
+        },
         Instruction::MSGSET => {
             let msgid = ctx.msgid();
             ctx.byte();
-            // NOTE: these numbers are NOT present in umineko
-            ctx.number();
-            ctx.number();
+
+            match ctx.version() {
+                ShinVersion::WhiteEternity => {
+                    // NOTE: these numbers are NOT present in umineko
+                    ctx.number();
+                    ctx.number();
+                }
+                ShinVersion::DC4 => {
+                    ctx.number();
+                }
+                ShinVersion::Konosuba => {
+                    todo!()
+                }
+            }
+
             ctx.string(StringSource::Msgset(msgid));
         }
         Instruction::MSGWAIT => {
             ctx.number();
         }
         Instruction::MSGSIGNAL => {}
+        Instruction::MSGSYNC => {
+            ctx.number();
+            ctx.number();
+        }
         Instruction::MSGCLOSE => {
             ctx.byte();
         }
@@ -382,14 +552,28 @@ pub fn react_instr<R: Reactor>(ctx: &mut Ctx<R>, instr: Instruction) {
         Instruction::BGMSYNC => {
             ctx.number();
         }
-        Instruction::SEPLAY => {
-            ctx.number();
-            ctx.number();
-            ctx.number();
-            ctx.number();
-            ctx.number();
-            ctx.number();
-        }
+        Instruction::SEPLAY => match ctx.version() {
+            ShinVersion::WhiteEternity => {
+                ctx.number();
+                ctx.number();
+                ctx.number();
+                ctx.number();
+                ctx.number();
+                ctx.number();
+            }
+            ShinVersion::DC4 => {
+                ctx.number();
+                ctx.number();
+                ctx.number();
+                ctx.number();
+                ctx.number();
+                ctx.number();
+                ctx.number();
+            }
+            ShinVersion::Konosuba => {
+                todo!()
+            }
+        },
         Instruction::SESTOP => {
             ctx.number();
             ctx.number();
@@ -411,17 +595,30 @@ pub fn react_instr<R: Reactor>(ctx: &mut Ctx<R>, instr: Instruction) {
             ctx.number();
             ctx.number();
         }
-        Instruction::SEONCE => {
-            ctx.number();
-            ctx.number();
-            ctx.number();
-            ctx.number();
-        }
+        Instruction::SEONCE => match ctx.version() {
+            ShinVersion::WhiteEternity => {
+                ctx.number();
+                ctx.number();
+                ctx.number();
+                ctx.number();
+            }
+            ShinVersion::DC4 => {
+                ctx.number();
+                ctx.number();
+                ctx.number();
+                ctx.number();
+                ctx.number();
+            }
+            ShinVersion::Konosuba => {
+                todo!()
+            }
+        },
         Instruction::VOICEPLAY => {
             ctx.string(StringSource::Voiceplay);
             ctx.number();
             ctx.number();
         }
+        Instruction::VOICESTOP => {}
         Instruction::VOICEWAIT => {
             ctx.number();
         }
@@ -434,7 +631,12 @@ pub fn react_instr<R: Reactor>(ctx: &mut Ctx<R>, instr: Instruction) {
             ctx.number();
         }
         Instruction::EVEND => {}
+        Instruction::RESUMESET => {}
+        Instruction::RESUME => {}
         Instruction::TROPHY => {
+            ctx.number();
+        }
+        Instruction::UNLOCK => {
             ctx.number();
         }
         Instruction::LAYERINIT => ctx.number(),
@@ -460,6 +662,10 @@ pub fn react_instr<R: Reactor>(ctx: &mut Ctx<R>, instr: Instruction) {
                 ctx.number();
             }
         }
+        Instruction::LAYERSWAP => {
+            ctx.number();
+            ctx.number();
+        }
         Instruction::LAYERSELECT => {
             ctx.number();
             ctx.number();
@@ -468,6 +674,29 @@ pub fn react_instr<R: Reactor>(ctx: &mut Ctx<R>, instr: Instruction) {
             ctx.number();
             ctx.number();
         }
+
+        Instruction::TRANSSET => {
+            ctx.number();
+            ctx.number();
+            ctx.number();
+            ctx.bitmask_number_array();
+        }
+        Instruction::TRANSWAIT => {
+            ctx.number();
+        }
+        Instruction::PAGEBACK => {}
+        Instruction::PLANESELECT => {
+            ctx.number();
+        }
+        Instruction::PLANECLEAR => {}
+        Instruction::MASKLOAD => {
+            ctx.number();
+            ctx.number();
+            ctx.number();
+        }
+        Instruction::MASKUNLOAD => {}
+        Instruction::CHATSET => ctx.string(StringSource::Chatset),
+
         Instruction::CHARCLEAR => {}
         Instruction::CHARLOAD => {
             ctx.number();
@@ -506,8 +735,13 @@ pub fn react_instr<R: Reactor>(ctx: &mut Ctx<R>, instr: Instruction) {
                 ctx.number();
             }
         }
+        #[allow(unreachable_patterns)]
         cmd => {
-            panic!("Unimplemented instruction {:?} @ {}", cmd, ctx.debug_loc());
+            panic!(
+                "Unimplemented instruction {:?} @ {}",
+                cmd,
+                ctx.in_location()
+            );
         }
     }
 }

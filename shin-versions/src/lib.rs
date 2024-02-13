@@ -20,6 +20,8 @@ use arrayref::array_ref;
 pub enum ShinVersion {
     /// 2016-09-22 PSVita `PCSG00901`
     WhiteEternity,
+    /// 2019-12-19 Switch `0100D8500EE14000`
+    DC4,
     /// 2020-08-27 Switch `01004920105FC000`
     Konosuba,
 }
@@ -40,6 +42,7 @@ pub enum StringKind {
     Dbgout,
     Logset,
     Voiceplay,
+    ChatSet,
 }
 
 pub enum StringArrayKind {
@@ -63,7 +66,7 @@ impl ShinVersion {
 
         match self {
             WhiteEternity => Short,
-            Konosuba => VarInt,
+            DC4 | Konosuba => VarInt,
         }
     }
 
@@ -76,6 +79,19 @@ impl ShinVersion {
             WhiteEternity => match kind {
                 Saveinfo | SelectTitle | Dbgout | Voiceplay => (U8Length, false),
                 Msgset | Logset => (U16Length, true),
+                ChatSet => unreachable!(),
+            },
+            DC4 => match kind {
+                Saveinfo => (U16Length, false),
+                SelectTitle => (U16Length, false),
+                Msgset => (U16Length, false),
+                Dbgout => (U16Length, false),
+                Logset => {
+                    unreachable!()
+                }
+                Voiceplay => (U16Length, false),
+                // TODO: check if fixup is actually needed
+                ChatSet => (U16Length, false),
             },
             Konosuba => todo!(),
         };
@@ -92,6 +108,9 @@ impl ShinVersion {
             WhiteEternity => match kind {
                 SelectChoices => (U8Length, true),
             },
+            DC4 => match kind {
+                SelectChoices => (U16Length, false),
+            },
             Konosuba => todo!(),
         };
 
@@ -103,6 +122,7 @@ impl ShinVersion {
         use ShinVersion::*;
         Some(match self {
             WhiteEternity => Rom2V1_0,
+            DC4 => Rom2V1_1,
             // konosuba doesn't store its assets in the rom, it just uses switch's romfs
             Konosuba => return None,
         })

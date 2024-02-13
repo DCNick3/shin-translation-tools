@@ -122,7 +122,7 @@ impl<'a, L: StringTraceListener> Reactor for StringTraceReactor<'a, L> {
         self.reader.has_instr()
     }
 
-    fn debug_loc(&self) -> std::string::String {
-        format!("0x{:08x}", self.reader.position())
+    fn in_location(&self) -> u32 {
+        self.reader.position()
     }
 }

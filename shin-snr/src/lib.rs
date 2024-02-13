@@ -10,13 +10,14 @@ use self::{ctx::Ctx, reactor::Reactor};
 fn react_impl<R: Reactor>(ctx: &mut Ctx<R>) {
     while ctx.has_instr() {
         ctx.instr_start();
+        let pos = ctx.in_location();
         let opcode = ctx.byte();
-        let Some(instr) = instruction::decode_instr(opcode) else {
-            panic!(
-                "Unknown opcode 0x{opcode:02x} ({opcode}) @ {}",
-                ctx.debug_loc()
-            );
+        let Some(instr) = instruction::decode_instr(ctx.version(), opcode) else {
+            panic!("Unknown opcode 0x{opcode:02x} ({opcode}) @ {}", pos);
         };
+
+        // println!("0x{:08x}: {:?}", pos, instr);
+
         instruction::react_instr(ctx, instr);
         ctx.instr_end();
     }

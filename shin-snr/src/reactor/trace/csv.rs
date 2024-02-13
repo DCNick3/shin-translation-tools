@@ -34,6 +34,7 @@ impl Serialize for StringSource {
             StringSource::Dbgout => serializer.serialize_str("dbgout"),
             StringSource::Logset => serializer.serialize_str("logset"),
             StringSource::Voiceplay => serializer.serialize_str("voiceplay"),
+            StringSource::Chatset => serializer.serialize_str("chatset"),
         }
     }
 }

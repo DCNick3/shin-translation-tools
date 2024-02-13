@@ -117,16 +117,34 @@ impl Command {
                     csv::Reader::from_path(translations).expect("Opening the CSV file failed");
                 let rewriter = CsvRewriter::new(translations);
 
-                let output = File::create(output).expect("Opening the output file failed");
-                let mut output = BufWriter::new(output);
-                // write the headers that are before the code
-                // we don't currently do anything with them
-                output
-                    .write_all(&snr_file[0..code_offset as usize])
-                    .expect("Writing to the output file failed");
-
                 let mut reactor = RewriteReactor::new(reader, rewriter, code_offset);
                 react_with(&mut reactor, version);
+
+                let output_size = reactor.output_size().next_multiple_of(16);
+
+                let output = File::create(output).expect("Opening the output file failed");
+                let mut output = BufWriter::new(output);
+
+                // copy the magic
+                output
+                    .write_all(&snr_file[0..4])
+                    .expect("Writing to the output file failed");
+                // re-write with the correct file sizes
+                // even though some engine versions do not care about this fields, some absolutely do!
+                // (for example, DC4)
+                output
+                    .write_all(&output_size.to_le_bytes())
+                    .expect("Writing to the output file failed");
+                // copy the rest of the header
+                output
+                    .write_all(&snr_file[8..code_offset as usize])
+                    .expect("Writing to the output file failed");
+
+                assert_eq!(
+                    code_offset as u64,
+                    output.stream_position().unwrap(),
+                    "Written header size does not match the expected size"
+                );
 
                 let mut reactor = reactor.into_emit(&mut output);
                 react_with(&mut reactor, version);
@@ -142,6 +160,12 @@ impl Command {
                 output
                     .write_all(&vec![0; padding as usize])
                     .expect("Writing to the output file failed");
+
+                assert_eq!(
+                    output_size as u64,
+                    output.stream_position().unwrap(),
+                    "Output file size does not match the expected size"
+                );
             }
         }
     }

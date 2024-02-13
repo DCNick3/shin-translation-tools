@@ -225,6 +225,11 @@ impl<'a, R> RewriteReactor<'a, R, BuildOffsetMapMode> {
         }
     }
 
+    // TODO: we can get size of non-reacted rewriter. Need one more typestate?
+    pub fn output_size(&self) -> u32 {
+        self.mode.out_position
+    }
+
     pub fn into_emit<W>(self, writer: W) -> RewriteReactor<'a, R, EmitMode<W>> {
         RewriteReactor {
             reader: self.reader.rewind(self.mode.initial_in_position),
@@ -349,7 +354,7 @@ impl<'a, R: StringRewriter, M: RewriteMode> Reactor for RewriteReactor<'a, R, M>
         self.reader.has_instr()
     }
 
-    fn debug_loc(&self) -> String {
-        format!("{:08x}", self.reader.position())
+    fn in_location(&self) -> u32 {
+        self.reader.position()
     }
 }

@@ -5,9 +5,13 @@ pub mod rewrite;
 pub mod trace;
 
 pub trait Reactor {
+    /// A single byte
     fn byte(&mut self) -> u8;
+    /// A 2-byte short
     fn short(&mut self) -> u16;
+    /// A 2-byte register
     fn reg(&mut self);
+    /// A 4-byte jump offset into the snr file
     fn offset(&mut self);
     fn u8string(&mut self, fixup: bool, source: StringSource);
     fn u16string(&mut self, fixup: bool, source: StringSource);
@@ -20,7 +24,7 @@ pub trait Reactor {
 
     fn has_instr(&self) -> bool;
 
-    fn debug_loc(&self) -> String;
+    fn in_location(&self) -> u32;
 }
 
 #[derive(Debug, Copy, Clone, Eq, PartialEq)]
@@ -33,6 +37,7 @@ pub enum StringSource {
     Dbgout,
     Logset,
     Voiceplay,
+    Chatset,
 }
 
 impl StringSource {
@@ -45,6 +50,7 @@ impl StringSource {
             StringSource::Dbgout => StringKind::Dbgout,
             StringSource::Logset => StringKind::Logset,
             StringSource::Voiceplay => StringKind::Voiceplay,
+            StringSource::Chatset => StringKind::ChatSet,
         }
     }
 
@@ -57,6 +63,7 @@ impl StringSource {
             StringSource::Dbgout => 0,
             StringSource::Logset => 0,
             StringSource::Voiceplay => 0,
+            StringSource::Chatset => 0,
         }
     }
 }

@@ -237,8 +237,9 @@ pub fn encode_sjis_zstring<'bump>(
     Ok(output)
 }
 
-const FIXUP_ENCODED: &str = "｢｣ｧｨｩｪｫｬｭｮｱｲｳｴｵｶｷｸｹｺｻｼｽｾｿﾀﾁﾂﾃﾄﾅﾆﾇﾈﾉﾊﾋﾌﾍﾎﾏﾐﾑﾒﾓﾔﾕﾖﾗﾘﾙﾚﾛﾜｦﾝｰｯ､ﾟﾞ･?｡";
-const FIXUP_DECODED: &str = "「」ぁぃぅぇぉゃゅょあいうえおかきくけこさしすせそたちつてとなにぬねのはひふへほまみむめもやゆよらりるれろわをんーっ、？！…　。";
+const FIXUP_ENCODED: &str =
+    "\u{f8f0}｡｢｣､･ｦｧｨｩｪｫｬｭｮｯｰｱｲｳｴｵｶｷｸｹｺｻｼｽｾｿﾀﾁﾂﾃﾄﾅﾆﾇﾈﾉﾊﾋﾌﾍﾎﾏﾐﾑﾒﾓﾔﾕﾖﾗﾘﾙﾚﾛﾜﾝﾞﾟ";
+const FIXUP_DECODED: &str = "\u{3000}。「」、…をぁぃぅぇぉゃゅょっーあいうえおかきくけこさしすせそたちつてとなにぬねのはひふへほまみむめもやゆよらりるれろわん！？";
 
 static FIXUP_DECODE_TABLE: Lazy<HashMap<char, char>> =
     Lazy::new(|| FIXUP_ENCODED.chars().zip(FIXUP_DECODED.chars()).collect());

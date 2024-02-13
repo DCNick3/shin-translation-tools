@@ -70,8 +70,8 @@ impl<'a> Reactor for OffsetValidatorReactor<'a> {
         self.reader.has_instr()
     }
 
-    fn debug_loc(&self) -> String {
-        format!("0x{:08x}", self.reader.position())
+    fn in_location(&self) -> u32 {
+        self.reader.position()
     }
 }
 
