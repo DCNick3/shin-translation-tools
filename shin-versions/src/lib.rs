@@ -79,18 +79,19 @@ impl ShinVersion {
             WhiteEternity => match kind {
                 Saveinfo | SelectTitle | Dbgout | Voiceplay => (U8Length, false),
                 Msgset | Logset => (U16Length, true),
-                ChatSet => unreachable!(),
-            },
-            DC4 => match kind {
-                Saveinfo => (U16Length, false),
-                SelectTitle => (U16Length, false),
-                Msgset => (U16Length, false),
-                Dbgout => (U16Length, false),
-                Logset => {
+                ChatSet => {
+                    // not in this game
                     unreachable!()
                 }
-                Voiceplay => (U16Length, false),
-                // TODO: check if fixup is actually needed
+            },
+            DC4 => match kind {
+                Saveinfo | SelectTitle | Dbgout | Voiceplay => (U16Length, false),
+                Msgset => (U16Length, true),
+                Logset => {
+                    // not in this game
+                    unreachable!()
+                }
+                // I _believe_ the SNR does not use any strings using the fixup encoding with this command
                 ChatSet => (U16Length, false),
             },
             Konosuba => todo!(),
