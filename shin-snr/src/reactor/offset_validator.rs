@@ -32,6 +32,10 @@ impl<'a> Reactor for OffsetValidatorReactor<'a> {
         self.reader.short()
     }
 
+    fn uint(&mut self) -> u32 {
+        self.reader.uint()
+    }
+
     fn reg(&mut self) {
         self.reader.reg();
     }
@@ -55,10 +59,6 @@ impl<'a> Reactor for OffsetValidatorReactor<'a> {
 
     fn u16string_array(&mut self, _fixup: bool, _source: StringArraySource) {
         self.reader.u16string_array();
-    }
-
-    fn msgid(&mut self) -> u32 {
-        self.reader.msgid()
     }
 
     fn instr_start(&mut self) {

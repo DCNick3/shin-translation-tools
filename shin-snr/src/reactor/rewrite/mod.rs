@@ -89,13 +89,6 @@ pub trait RewriteMode {
     }
 
     fn offset(&mut self, o: u32);
-
-    fn msgid(&mut self, msgid: u32) -> u32 {
-        let [m0, m1, m2, _] = msgid.to_le_bytes();
-        self.write(&[m0, m1, m2]);
-
-        msgid
-    }
     fn instr_start(&mut self, in_offset: u32);
 }
 
@@ -254,6 +247,10 @@ impl<'a, R: StringRewriter, M: RewriteMode> Reactor for RewriteReactor<'a, R, M>
         self.mode.short(self.reader.short())
     }
 
+    fn uint(&mut self) -> u32 {
+        self.reader.uint()
+    }
+
     fn reg(&mut self) {
         self.mode.reg(self.reader.reg())
     }
@@ -335,10 +332,6 @@ impl<'a, R: StringRewriter, M: RewriteMode> Reactor for RewriteReactor<'a, R, M>
 
         self.mode.short(res.len() as u16);
         self.mode.write(res.as_slice());
-    }
-
-    fn msgid(&mut self) -> u32 {
-        self.mode.msgid(self.reader.msgid())
     }
 
     fn instr_start(&mut self) {

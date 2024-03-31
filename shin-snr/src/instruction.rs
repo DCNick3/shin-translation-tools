@@ -61,6 +61,8 @@ pub enum Instruction {
     SGET,
     SSET,
     WAIT,
+    // only on old
+    KEYWAIT,
     MSGINIT,
     MSGSET,
     MSGWAIT,
@@ -68,6 +70,7 @@ pub enum Instruction {
     MSGSYNC,
     MSGCLOSE,
     MSGFACE,
+    MSGCHECK,
     LOGSET,
     SELECT,
     WIPE,
@@ -85,11 +88,16 @@ pub enum Instruction {
     SEPAN,
     SEWAIT,
     SEONCE,
+    // Unknown instuction with no semantics (like, really, the handlers are empty)
+    // but it has some arguments. Probably a leftover from even older version...
+    UNK9B,
     VOICEPLAY,
     VOICESTOP,
     VOICEWAIT,
 
     SAVEINFO,
+    // only on old
+    MOVIE,
     AUTOSAVE,
     EVBEGIN,
     EVEND,
@@ -99,6 +107,8 @@ pub enum Instruction {
     TROPHY,
     UNLOCK,
 
+    // only on old
+    LAYERCLEAR,
     LAYERINIT,
     LAYERLOAD,
     LAYERUNLOAD,
@@ -117,6 +127,14 @@ pub enum Instruction {
     MASKUNLOAD,
 
     // Game-specific commands
+    // Alias Carnival
+    ICOGET,
+    STAGEINFO,
+    ICOCHK,
+    EMOTEWAIT,
+    NAMED,
+    BACKINIT,
+
     // White Eternity
     CHARCLEAR,
     CHARLOAD,
@@ -130,6 +148,7 @@ pub enum Instruction {
     // DC4
     CHATSET,
 
+    // this is the last thing in the opcode space
     DEBUGOUT,
 }
 
@@ -137,6 +156,96 @@ pub fn decode_instr(version: ShinVersion, opcode: u8) -> Option<Instruction> {
     use Instruction::*;
     // TODO: those can probably be smartly merged (need to gather some data first though)
     match version {
+        ShinVersion::AliasCarnival => {
+            // TODO: can opcode tables be part of shin-version?
+            Some(match opcode {
+                // ===
+                // Instructions
+                0x40 => uo,
+                0x41 => bo,
+                0x42 => exp,
+                0x43 => mm,
+                0x44 => gt,
+                0x45 => st,
+                0x46 => jc,
+                0x47 => j,
+                0x48 => gosub,
+                0x49 => retsub,
+                0x4a => jt,
+                0x4b => gosubt,
+                0x4c => rnd,
+                0x4d => push,
+                0x4e => pop,
+                0x4f => call,
+                0x50 => r#return,
+                // no 0x51 and 0x52
+
+                // ===
+                // Commands
+                0x80 => EXIT,
+                0x81 => SGET,
+                0x82 => SSET,
+                0x83 => WAIT,
+                0x84 => KEYWAIT,
+                0x85 => MSGINIT,
+                0x86 => MSGFACE,
+                0x87 => MSGSET,
+                0x88 => MSGWAIT,
+                0x89 => MSGSIGNAL,
+                0x8a => MSGCLOSE,
+                // WTF is MSGCHECK
+                0x8b => MSGCHECK,
+                0x8c => LOGSET,
+                0x8d => SELECT,
+                0x8e => WIPE,
+                0x8f => WIPEWAIT,
+
+                0x90 => BGMPLAY,
+                0x91 => BGMSTOP,
+                0x92 => BGMVOL,
+                0x93 => BGMWAIT,
+                0x94 => BGMSYNC,
+                0x95 => SEPLAY,
+                0x96 => SESTOP,
+                0x97 => SESTOPALL,
+                0x98 => SEVOL,
+                // no SEPAN!
+                // 0x99 => SEPAN,
+                0x99 => SEWAIT,
+                0x9a => SEONCE,
+                // ADV's handler for this command is empty...
+                // VOICEPLAY and VOICEWAIT are in the next block
+                0x9b => UNK9B,
+
+                0xa0 => SAVEINFO,
+                // 0xa1 => AUTOSAVE,
+                0xa1 => MOVIE,
+                0xa2 => EVBEGIN,
+                0xa3 => EVEND,
+                // no 0xa4
+                0xa5 => AUTOSAVE,
+                0xa6 => VOICEPLAY,
+                0xa7 => VOICEWAIT,
+
+                0xb0 => TROPHY,
+                0xb1 => ICOGET,
+                0xb2 => STAGEINFO,
+                0xb3 => ICOCHK,
+
+                // layer WHAT?
+                0xc0 => LAYERCLEAR,
+                0xc1 => LAYERLOAD,
+                // no LAYERUNLOAD
+                0xc2 => LAYERCTRL,
+                0xc3 => LAYERWAIT,
+                0xc4 => EMOTEWAIT,
+                0xc5 => NAMED,
+                0xc6 => BACKINIT,
+
+                0xff => DEBUGOUT,
+                _ => return None,
+            })
+        }
         ShinVersion::WhiteEternity => {
             Some(match opcode {
                 0x00 => EXIT,
@@ -363,7 +472,7 @@ pub fn react_instr<R: Reactor>(ctx: &mut Ctx<R>, instr: Instruction) {
         }
         Instruction::mm => {
             ctx.number();
-            let count = ctx.short();
+            let count = ctx.mm_gt_st_length();
             for _ in 0..count {
                 ctx.reg();
             }
@@ -371,7 +480,7 @@ pub fn react_instr<R: Reactor>(ctx: &mut Ctx<R>, instr: Instruction) {
         Instruction::gt => {
             ctx.reg();
             ctx.number();
-            let number_count = ctx.short();
+            let number_count = ctx.mm_gt_st_length();
             // NOTE: in umineko, these are padded to 4 bytes to allow for seeking
             // with NumberSpecStyle::Short, this is not necessary
             for _ in 0..number_count {
@@ -381,7 +490,7 @@ pub fn react_instr<R: Reactor>(ctx: &mut Ctx<R>, instr: Instruction) {
         Instruction::st => {
             ctx.number();
             ctx.number();
-            let number_count = ctx.short();
+            let number_count = ctx.mm_gt_st_length();
             for _ in 0..number_count {
                 ctx.reg();
             }
@@ -406,17 +515,17 @@ pub fn react_instr<R: Reactor>(ctx: &mut Ctx<R>, instr: Instruction) {
                 ctx.offset();
             }
         }
-        Instruction::rnd => {
-            ctx.reg();
-            ctx.number();
-            ctx.number();
-        }
         Instruction::gosubt => {
             ctx.number();
             let offset_count = ctx.short();
             for _ in 0..offset_count {
                 ctx.offset();
             }
+        }
+        Instruction::rnd => {
+            ctx.reg();
+            ctx.number();
+            ctx.number();
         }
         Instruction::push => {
             let push_count = ctx.byte();
@@ -453,10 +562,18 @@ pub fn react_instr<R: Reactor>(ctx: &mut Ctx<R>, instr: Instruction) {
             ctx.number();
         }
 
-        Instruction::EXIT => {
-            ctx.byte();
-            ctx.number();
-        }
+        Instruction::EXIT => match ctx.version() {
+            ShinVersion::AliasCarnival => {
+                ctx.number();
+            }
+            ShinVersion::WhiteEternity | ShinVersion::DC4 => {
+                ctx.byte();
+                ctx.number();
+            }
+            ShinVersion::Konosuba => {
+                todo!()
+            }
+        },
         Instruction::SGET => {
             ctx.reg();
             ctx.number();
@@ -465,12 +582,25 @@ pub fn react_instr<R: Reactor>(ctx: &mut Ctx<R>, instr: Instruction) {
             ctx.number();
             ctx.number();
         }
-        Instruction::WAIT => {
-            ctx.byte();
-            ctx.number();
-        }
+        Instruction::WAIT => match ctx.version() {
+            ShinVersion::AliasCarnival => ctx.number(),
+            ShinVersion::WhiteEternity | ShinVersion::DC4 => {
+                ctx.byte();
+                ctx.number();
+            }
+            ShinVersion::Konosuba => {
+                todo!()
+            }
+        },
+        Instruction::KEYWAIT => match ctx.version() {
+            ShinVersion::AliasCarnival => ctx.number(),
+            ShinVersion::WhiteEternity | ShinVersion::DC4 => unreachable!(),
+            ShinVersion::Konosuba => {
+                todo!()
+            }
+        },
         Instruction::MSGINIT => match ctx.version() {
-            ShinVersion::WhiteEternity => {
+            ShinVersion::AliasCarnival | ShinVersion::WhiteEternity => {
                 ctx.number();
                 ctx.number();
             }
@@ -482,10 +612,12 @@ pub fn react_instr<R: Reactor>(ctx: &mut Ctx<R>, instr: Instruction) {
             }
         },
         Instruction::MSGSET => {
-            let msgid = ctx.msgid();
-            ctx.byte();
+            let msgid = ctx.uint() & 0xffffff;
 
             match ctx.version() {
+                ShinVersion::AliasCarnival => {
+                    ctx.number();
+                }
                 ShinVersion::WhiteEternity => {
                     // NOTE: these numbers are NOT present in umineko
                     ctx.number();
@@ -509,15 +641,43 @@ pub fn react_instr<R: Reactor>(ctx: &mut Ctx<R>, instr: Instruction) {
             ctx.number();
             ctx.number();
         }
-        Instruction::MSGCLOSE => {
-            ctx.byte();
+        Instruction::MSGCLOSE => match ctx.version() {
+            ShinVersion::AliasCarnival => {}
+            ShinVersion::WhiteEternity | ShinVersion::DC4 => {
+                ctx.byte();
+            }
+            ShinVersion::Konosuba => {
+                todo!()
+            }
+        },
+        Instruction::MSGCHECK => {
+            ctx.uint();
         }
-        Instruction::MSGFACE => {
-            ctx.number();
-        }
-        Instruction::LOGSET => {
-            ctx.string(StringSource::Logset);
-        }
+        Instruction::MSGFACE => match ctx.version() {
+            ShinVersion::AliasCarnival => {
+                ctx.number();
+                ctx.number();
+                ctx.number();
+                ctx.number();
+            }
+            ShinVersion::WhiteEternity | ShinVersion::DC4 => ctx.number(),
+            ShinVersion::Konosuba => {
+                todo!()
+            }
+        },
+        Instruction::LOGSET => match ctx.version() {
+            ShinVersion::AliasCarnival => {
+                ctx.number();
+                ctx.string(StringSource::Logset)
+            }
+            ShinVersion::WhiteEternity => ctx.string(StringSource::Logset),
+            ShinVersion::DC4 => {
+                unreachable!()
+            }
+            ShinVersion::Konosuba => {
+                todo!()
+            }
+        },
         Instruction::SELECT => {
             ctx.short();
             ctx.short();
@@ -553,7 +713,16 @@ pub fn react_instr<R: Reactor>(ctx: &mut Ctx<R>, instr: Instruction) {
             ctx.number();
         }
         Instruction::SEPLAY => match ctx.version() {
+            ShinVersion::AliasCarnival => {
+                // 5x number
+                ctx.number();
+                ctx.number();
+                ctx.number();
+                ctx.number();
+                ctx.number();
+            }
             ShinVersion::WhiteEternity => {
+                // 6x number
                 ctx.number();
                 ctx.number();
                 ctx.number();
@@ -562,6 +731,7 @@ pub fn react_instr<R: Reactor>(ctx: &mut Ctx<R>, instr: Instruction) {
                 ctx.number();
             }
             ShinVersion::DC4 => {
+                // 7x number
                 ctx.number();
                 ctx.number();
                 ctx.number();
@@ -596,6 +766,11 @@ pub fn react_instr<R: Reactor>(ctx: &mut Ctx<R>, instr: Instruction) {
             ctx.number();
         }
         Instruction::SEONCE => match ctx.version() {
+            ShinVersion::AliasCarnival => {
+                ctx.number();
+                ctx.number();
+                ctx.number();
+            }
             ShinVersion::WhiteEternity => {
                 ctx.number();
                 ctx.number();
@@ -613,6 +788,10 @@ pub fn react_instr<R: Reactor>(ctx: &mut Ctx<R>, instr: Instruction) {
                 todo!()
             }
         },
+        Instruction::UNK9B => {
+            ctx.number();
+            ctx.number();
+        }
         Instruction::VOICEPLAY => {
             ctx.string(StringSource::Voiceplay);
             ctx.number();
@@ -625,6 +804,9 @@ pub fn react_instr<R: Reactor>(ctx: &mut Ctx<R>, instr: Instruction) {
         Instruction::SAVEINFO => {
             ctx.number();
             ctx.string(StringSource::Saveinfo);
+        }
+        Instruction::MOVIE => {
+            ctx.number();
         }
         Instruction::AUTOSAVE => {}
         Instruction::EVBEGIN => {
@@ -639,6 +821,7 @@ pub fn react_instr<R: Reactor>(ctx: &mut Ctx<R>, instr: Instruction) {
         Instruction::UNLOCK => {
             ctx.number();
         }
+        Instruction::LAYERCLEAR => {}
         Instruction::LAYERINIT => ctx.number(),
         Instruction::LAYERLOAD => {
             ctx.number();
@@ -695,8 +878,30 @@ pub fn react_instr<R: Reactor>(ctx: &mut Ctx<R>, instr: Instruction) {
             ctx.number();
         }
         Instruction::MASKUNLOAD => {}
-        Instruction::CHATSET => ctx.string(StringSource::Chatset),
 
+        // Alias Carnival
+        Instruction::ICOGET => {
+            let len = ctx.byte();
+            for _ in 0..len {
+                ctx.number();
+            }
+        }
+        Instruction::STAGEINFO => {
+            ctx.string(StringSource::Stageinfo);
+            ctx.string(StringSource::Stageinfo);
+        }
+        Instruction::ICOCHK => {
+            // not that sure what this short actually represents
+            ctx.short();
+        }
+        // Instruction::EMOTEWAIT => todo!(),
+        Instruction::NAMED => {
+            ctx.byte();
+            ctx.string(StringSource::Named);
+        }
+        Instruction::BACKINIT => {}
+
+        // White Eternity
         Instruction::CHARCLEAR => {}
         Instruction::CHARLOAD => {
             ctx.number();
@@ -728,13 +933,26 @@ pub fn react_instr<R: Reactor>(ctx: &mut Ctx<R>, instr: Instruction) {
             ctx.number();
         }
         Instruction::CHARSYNC => {}
-        Instruction::DEBUGOUT => {
-            ctx.string(StringSource::Dbgout);
-            let count = ctx.byte();
-            for _ in 0..count {
-                ctx.number();
+
+        // DC4
+        Instruction::CHATSET => ctx.string(StringSource::Chatset),
+
+        Instruction::DEBUGOUT => match ctx.version() {
+            ShinVersion::AliasCarnival => {
+                ctx.string(StringSource::Dbgout);
+                ctx.short();
             }
-        }
+            ShinVersion::WhiteEternity | ShinVersion::DC4 => {
+                ctx.string(StringSource::Dbgout);
+                let count = ctx.byte();
+                for _ in 0..count {
+                    ctx.number();
+                }
+            }
+            ShinVersion::Konosuba => {
+                todo!()
+            }
+        },
         #[allow(unreachable_patterns)]
         cmd => {
             panic!(

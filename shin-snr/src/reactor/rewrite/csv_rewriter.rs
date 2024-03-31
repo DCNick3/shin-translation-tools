@@ -16,6 +16,8 @@ enum RawStringSource {
     Logset,
     Voiceplay,
     Chatset,
+    Named,
+    Stageinfo,
 }
 
 fn deser_hex<'de, D: serde::Deserializer<'de>>(deser: D) -> Result<u32, D::Error> {
@@ -61,6 +63,8 @@ impl RawEntry {
                 RawStringSource::Logset => StringSource::Logset,
                 RawStringSource::Voiceplay => StringSource::Voiceplay,
                 RawStringSource::Chatset => StringSource::Chatset,
+                RawStringSource::Named => StringSource::Named,
+                RawStringSource::Stageinfo => StringSource::Stageinfo,
             },
             s: self.s,
             translated: self.translated,

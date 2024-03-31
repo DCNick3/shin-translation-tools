@@ -18,6 +18,8 @@ use arrayref::array_ref;
 #[derive(Debug, Copy, Clone, Ord, PartialOrd, Eq, PartialEq)]
 #[cfg_attr(feature = "clap", derive(clap::ValueEnum))]
 pub enum ShinVersion {
+    /// 2015-10-29 PSVita `PCSG00628`
+    AliasCarnival,
     /// 2016-09-22 PSVita `PCSG00901`
     WhiteEternity,
     /// 2019-12-19 Switch `0100D8500EE14000`
@@ -42,7 +44,14 @@ pub enum StringKind {
     Dbgout,
     Logset,
     Voiceplay,
-    ChatSet,
+
+    // Game-specific string kinds
+    // DC4
+    Chatset,
+
+    // Alias Carnival
+    Named,
+    Stageinfo,
 }
 
 pub enum StringArrayKind {
@@ -51,10 +60,10 @@ pub enum StringArrayKind {
 
 /// Describes how a particular string kind is encoded
 pub struct StringStyle {
-    pub length_size: LengthSize,
+    pub size_kind: LengthKind,
     pub fixup: bool,
 }
-pub enum LengthSize {
+pub enum LengthKind {
     U8Length,
     U16Length,
 }
@@ -65,21 +74,43 @@ impl ShinVersion {
         use ShinVersion::*;
 
         match self {
-            WhiteEternity => Short,
+            AliasCarnival | WhiteEternity => Short,
             DC4 | Konosuba => VarInt,
         }
     }
 
+    /// The type of the length field for mm, gt and st instructions
+    pub fn mm_gt_st_length(&self) -> LengthKind {
+        match self {
+            ShinVersion::AliasCarnival => LengthKind::U8Length,
+            ShinVersion::WhiteEternity | ShinVersion::DC4 => LengthKind::U16Length,
+            ShinVersion::Konosuba => {
+                todo!()
+            }
+        }
+    }
+
     pub fn string_style(&self, kind: StringKind) -> StringStyle {
-        use LengthSize::*;
+        use LengthKind::*;
         use ShinVersion::*;
         use StringKind::*;
 
         let (length_size, fixup) = match self {
+            AliasCarnival => match kind {
+                Saveinfo | SelectTitle | Dbgout | Voiceplay | Stageinfo => (U8Length, false),
+                // maybe it's fixed up?
+                Named => (U8Length, false),
+                Logset => (U16Length, true),
+                Msgset => (U16Length, true),
+                Chatset => {
+                    // not in this game
+                    unreachable!()
+                }
+            },
             WhiteEternity => match kind {
                 Saveinfo | SelectTitle | Dbgout | Voiceplay => (U8Length, false),
                 Msgset | Logset => (U16Length, true),
-                ChatSet => {
+                Chatset | Named | Stageinfo => {
                     // not in this game
                     unreachable!()
                 }
@@ -87,25 +118,32 @@ impl ShinVersion {
             DC4 => match kind {
                 Saveinfo | SelectTitle | Dbgout | Voiceplay => (U16Length, false),
                 Msgset => (U16Length, true),
-                Logset => {
+                Logset | Named | Stageinfo => {
                     // not in this game
                     unreachable!()
                 }
                 // I _believe_ the SNR does not use any strings using the fixup encoding with this command
-                ChatSet => (U16Length, false),
+                Chatset => (U16Length, false),
             },
             Konosuba => todo!(),
         };
 
-        StringStyle { length_size, fixup }
+        StringStyle {
+            size_kind: length_size,
+            fixup,
+        }
     }
 
     pub fn string_array_style(&self, kind: StringArrayKind) -> StringStyle {
-        use LengthSize::*;
+        use LengthKind::*;
         use ShinVersion::*;
         use StringArrayKind::*;
 
         let (length_size, fixup) = match self {
+            AliasCarnival => match kind {
+                // TODO: fixups? really?
+                SelectChoices => (U8Length, true),
+            },
             WhiteEternity => match kind {
                 SelectChoices => (U8Length, true),
             },
@@ -115,13 +153,17 @@ impl ShinVersion {
             Konosuba => todo!(),
         };
 
-        StringStyle { length_size, fixup }
+        StringStyle {
+            size_kind: length_size,
+            fixup,
+        }
     }
 
     pub fn rom_version(&self) -> Option<RomVersion> {
         use RomVersion::*;
         use ShinVersion::*;
         Some(match self {
+            AliasCarnival => Rom2V1_0,
             WhiteEternity => Rom2V1_0,
             DC4 => Rom2V1_1,
             // konosuba doesn't store its assets in the rom, it just uses switch's romfs

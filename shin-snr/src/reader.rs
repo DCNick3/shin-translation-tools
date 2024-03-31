@@ -32,6 +32,10 @@ impl<'a> Reader<'a> {
         u16::from_le_bytes(self.take(2).try_into().unwrap())
     }
 
+    pub fn uint(&mut self) -> u32 {
+        u32::from_le_bytes(self.take(4).try_into().unwrap())
+    }
+
     pub fn reg(&mut self) -> u16 {
         self.short()
     }
@@ -70,12 +74,6 @@ impl<'a> Reader<'a> {
     pub fn u16string_array(&mut self) -> &[u8] {
         let len = self.short();
         self.take(len as usize)
-    }
-
-    pub fn msgid(&mut self) -> u32 {
-        // TODO: differs between versions. should this be named smth like u24?
-        let data = self.take(3);
-        u32::from_le_bytes([data[0], data[1], data[2], 0])
     }
 
     pub fn has_instr(&self) -> bool {

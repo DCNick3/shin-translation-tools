@@ -9,6 +9,8 @@ pub trait Reactor {
     fn byte(&mut self) -> u8;
     /// A 2-byte short
     fn short(&mut self) -> u16;
+    /// A 4-byte uint
+    fn uint(&mut self) -> u32;
     /// A 2-byte register
     fn reg(&mut self);
     /// A 4-byte jump offset into the snr file
@@ -17,7 +19,6 @@ pub trait Reactor {
     fn u16string(&mut self, fixup: bool, source: StringSource);
     fn u8string_array(&mut self, fixup: bool, source: StringArraySource);
     fn u16string_array(&mut self, fixup: bool, source: StringArraySource);
-    fn msgid(&mut self) -> u32;
 
     fn instr_start(&mut self);
     fn instr_end(&mut self);
@@ -37,7 +38,12 @@ pub enum StringSource {
     Dbgout,
     Logset,
     Voiceplay,
+    // Game-specific string sources
+    // DC4
     Chatset,
+    // Alias Carnival
+    Named,
+    Stageinfo,
 }
 
 impl StringSource {
@@ -50,7 +56,9 @@ impl StringSource {
             StringSource::Dbgout => StringKind::Dbgout,
             StringSource::Logset => StringKind::Logset,
             StringSource::Voiceplay => StringKind::Voiceplay,
-            StringSource::Chatset => StringKind::ChatSet,
+            StringSource::Chatset => StringKind::Chatset,
+            StringSource::Named => StringKind::Named,
+            StringSource::Stageinfo => StringKind::Stageinfo,
         }
     }
 
@@ -64,6 +72,8 @@ impl StringSource {
             StringSource::Logset => 0,
             StringSource::Voiceplay => 0,
             StringSource::Chatset => 0,
+            StringSource::Named => 0,
+            StringSource::Stageinfo => 0,
         }
     }
 }

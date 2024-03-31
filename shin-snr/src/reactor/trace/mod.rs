@@ -44,6 +44,10 @@ impl<'a, L: StringTraceListener> Reactor for StringTraceReactor<'a, L> {
         self.reader.short()
     }
 
+    fn uint(&mut self) -> u32 {
+        self.reader.uint()
+    }
+
     fn reg(&mut self) {
         self.reader.reg();
     }
@@ -53,8 +57,8 @@ impl<'a, L: StringTraceListener> Reactor for StringTraceReactor<'a, L> {
     }
 
     fn u8string(&mut self, fixup: bool, source: StringSource) {
-        let s = self.reader.u8string();
-        let s = decode_sjis_zstring(&self.bump, s, fixup).unwrap();
+        let raw = self.reader.u8string();
+        let s = decode_sjis_zstring(&self.bump, raw, fixup).unwrap();
         self.listener
             .on_string(self.current_instr_offset, source, s)
     }
@@ -106,10 +110,6 @@ impl<'a, L: StringTraceListener> Reactor for StringTraceReactor<'a, L> {
             self.listener
                 .on_string(self.current_instr_offset, source_maker(i as u32), s)
         }
-    }
-
-    fn msgid(&mut self) -> u32 {
-        self.reader.msgid()
     }
 
     fn instr_start(&mut self) {
