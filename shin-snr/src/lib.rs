@@ -13,7 +13,7 @@ fn react_impl<R: Reactor>(ctx: &mut Ctx<R>) {
         let pos = ctx.in_location();
         let opcode = ctx.byte();
         let Some(instr) = instruction::decode_instr(ctx.version(), opcode) else {
-            panic!("Unknown opcode 0x{opcode:02x} ({opcode}) @ {}", pos);
+            panic!("Unknown opcode 0x{opcode:02x} ({opcode}) @ 0x{:08x}", pos);
         };
 
         // println!("0x{:08x}: {:?}", pos, instr);

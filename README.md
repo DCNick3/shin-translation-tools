@@ -1,11 +1,14 @@
-
 A future home for translation-focused tools for the shin engine.
 
 I've already made a few tools for this engine:
-- [shin](https://github.com/DCNick3/shin) - a reimplementation of the umineko version of shin engine and `sdu` - a companion tool for extracting game data
-- [ShinDataUtil](https://github.com/DCNick3/ShinDataUtil) - a comprehensive tool for extracting and repacking the game data 
 
-However, they target relatively modern versions of the engine (the former - switch's umineko, the latter - switch's higurashi).
+- [shin](https://github.com/DCNick3/shin) - a reimplementation of the umineko version of shin engine and `sdu` - a
+  companion tool for extracting game data
+- [ShinDataUtil](https://github.com/DCNick3/ShinDataUtil) - a comprehensive tool for extracting and repacking the game
+  data
+
+However, they target relatively modern versions of the engine (the former - switch's umineko, the latter - switch's
+higurashi).
 
 The aim of this project is to provide tools that cover a wider range of versions.
 
@@ -14,11 +17,13 @@ As a starting point I'm targeting the "AstralAir no Shiroki Towa -White Eternity
 ## Features
 
 - Extraction and compilation of ROM files compatible with, AFAIK, all* versions of the engine
-- Translation of the game script (SNR files). See [game support](#game-support) section to find out which games are supported
+- Translation of the game script (SNR files). See [game support](#game-support) section to find out which games are
+  supported
 
 \* except for PS2 versions, which embed rom files directly onto the disc
 
-In the future I plan to implement more engine versions for the SNR translation tool, and maybe make a multi-version tool for working with graphics (PIC and TXA).
+In the future I plan to implement more engine versions for the SNR translation tool, and maybe make a multi-version tool
+for working with graphics (PIC and TXA).
 
 ## Installation
 
@@ -56,9 +61,20 @@ Then re-start the shell or source the generated file
 
 ## Game support
 
-Although ROM files are supported for all versions of the engine, the SNR translation tool requires support for each game separately. See "shin-tl snr support" column in [this spreadsheet](https://docs.google.com/spreadsheets/d/1wGX9FOQq_iXcWMnY9qITCAV7hq1R7_gpWwjkT4_tKDI/edit#gid=0) to find out which games are supported. 
+Although ROM files are supported for all versions of the engine, the SNR translation tool requires support for each game
+separately. See "shin-tl snr support" column
+in [this spreadsheet](https://docs.google.com/spreadsheets/d/1wGX9FOQq_iXcWMnY9qITCAV7hq1R7_gpWwjkT4_tKDI/edit#gid=0) to
+find out which games are supported.
 
-Af of writing this readme, vita version of "AstralAir no Shiroki Towa -White Eternity-" and switch version of "D.C.4 -Da Capo 4-" are supported.
+Af of writing this readme, vita versions of "AstralAir no Shiroki Towa -White Eternity-" and "ALIA's CARNIVAL!
+Sacrament" along with switch
+version of "D.C.4 -Da Capo 4-" are supported.
+
+A note on ALIA's CARNICAL support: due to the way that engine version is coded, most english characters will be
+interpreted as commands. This won't allow an English translation without additional hacks.
+See https://github.com/DCNick3/shin-translation-tools/issues/3.
+
+If you want to translate some of the games this engine uses, let me know, so I can prioritize support for that game.
 
 ## Usage
 
@@ -66,9 +82,11 @@ Af of writing this readme, vita version of "AstralAir no Shiroki Towa -White Ete
 
 First of all, you would need the game files. How you obtain it differs by the platform.
 
-On Switch, you would need to first dump the game with [nxdumptool](https://github.com/DarkMatterCore/nxdumptool) and then extract the romfs files with [hactoolnet](https://github.com/Thealexbarney/LibHac). 
+On Switch, you would need to first dump the game with [nxdumptool](https://github.com/DarkMatterCore/nxdumptool) and
+then extract the romfs files with [hactoolnet](https://github.com/Thealexbarney/LibHac).
 
-shin engine usually packages its files into one or two `.rom` files: `data.rom` and sometimes `patch.rom`. You would need to extract them first.
+shin engine usually packages its files into one or two `.rom` files: `data.rom` and sometimes `patch.rom`. You would
+need to extract them first.
 
 After you have obtained the rom files, `shin-tl` can already handle them
 
@@ -83,6 +101,7 @@ shin-tl rom extract <data.rom> <rom-dir>
 This will create the `rom-dir` directory and extract the rom files into it.
 
 The game stores its data in multitude of formats. The ones that are the most interesting for translation are:
+
 - `SNR` - the game script
 - `PIC` - pictures (mostly CGs)
 - `TXA` - texture archives (mostly UI elements)
@@ -100,11 +119,15 @@ To extract strings from the snr file into a csv file, use a command like this:
 shin-tl snr read <engine-version> <main.snr> <strings.csv>
 ```
 
-The format of the SNR files varies greatly with the engine version, and it does not contain any indicators as to which version it is. Thus, you need to supply the engine version to the tool.
+The format of the SNR files varies greatly with the engine version, and it does not contain any indicators as to which
+version it is. Thus, you need to supply the engine version to the tool.
 
-See "shin-tl name" column of [this spreadsheet](https://docs.google.com/spreadsheets/d/1wGX9FOQq_iXcWMnY9qITCAV7hq1R7_gpWwjkT4_tKDI/edit#gid=0) corresponding ti your game to find out what to put here.
+See "shin-tl name" column
+of [this spreadsheet](https://docs.google.com/spreadsheets/d/1wGX9FOQq_iXcWMnY9qITCAV7hq1R7_gpWwjkT4_tKDI/edit#gid=0)
+corresponding ti your game to find out what to put here.
 
-The `strings.csv` file will contain the extracted strings. It can be edited with a spreadsheet editor like Excel or LibreOffice Calc.
+The `strings.csv` file will contain the extracted strings. It can be edited with a spreadsheet editor like Excel or
+LibreOffice Calc.
 
 Here's how it will look like:
 
@@ -120,17 +143,21 @@ index,offset,source,source_subindex,s,translated
 <...>
 ```
 
-The `index` column is used to later inject the translated strings back into the SNR file, while `offset`, `source` and `source_subindex` provide information about where the string comes from.
+The `index` column is used to later inject the translated strings back into the SNR file, while `offset`, `source`
+and `source_subindex` provide information about where the string comes from.
 
-If you are using a spreadsheet editor, take care to avoid conversion of the columns to numbers, as it will break the tool.
+If you are using a spreadsheet editor, take care to avoid conversion of the columns to numbers, as it will break the
+tool.
 
-In case of Google Spreadsheets, make sure to uncheck the "Convert text to numbers, dates and formulas" option when importing the csv:
+In case of Google Spreadsheets, make sure to uncheck the "Convert text to numbers, dates and formulas" option when
+importing the csv:
 
 ![](googledoc_import.png)
 
 2. Inject the translated strings back
 
-Create a translation csv by either putting your translation into the `translated` column, or modifying the `s` column directly. The `translated` column will take precedence over the `s` column.
+Create a translation csv by either putting your translation into the `translated` column, or modifying the `s` column
+directly. The `translated` column will take precedence over the `s` column.
 
 To inject the translated strings back into the snr file, use a command like this:
 
@@ -144,7 +171,9 @@ This will read the translation csv, replace the strings in the snr file and writ
 
 After touching all the files you wanted to translate, you would need to package them back into a `.rom` file.
 
-All games I saw so far load the `patch.rom` file on top of `data.rom` (even if in original distribution there's no `patch.rom`). It also tends to be smaller, so you almost definitely want to put your translated files into `patch.rom`.
+All games I saw so far load the `patch.rom` file on top of `data.rom` (even if in original distribution there's
+no `patch.rom`). It also tends to be smaller, so you almost definitely want to put your translated files
+into `patch.rom`.
 
 To rebuild the rom file, use a command like this:
 
@@ -154,20 +183,33 @@ shin-tl rom create --rom-version <rom-or-game-version> <rom-dir> <patch.rom>
 
 This will package all files and directories inside `rom-dir` into a `patch.rom` file.
 
-Note that the rom format varies from game to game, so you need to supply either the rom format (`rom1-v2-1`, `rom2-v1-0` or `rom2-v1-1`) or the engine version to the tool. You can see the correspondence in [this spreadsheet](https://docs.google.com/spreadsheets/d/1wGX9FOQq_iXcWMnY9qITCAV7hq1R7_gpWwjkT4_tKDI).
+Note that the rom format varies from game to game, so you need to supply either the rom format (`rom1-v2-1`, `rom2-v1-0`
+or `rom2-v1-1`) or the engine version to the tool. You can see the correspondence
+in [this spreadsheet](https://docs.google.com/spreadsheets/d/1wGX9FOQq_iXcWMnY9qITCAV7hq1R7_gpWwjkT4_tKDI).
 
-After that, you can put the `patch.rom` file back into the game (however it is done on the platform you are working with).
+After that, you can put the `patch.rom` file back into the game (however it is done on the platform you are working
+with).
 
 On Switch you would use LayeredFS mods to do that.
 
+## Message format
+
+See https://docs.google.com/spreadsheets/d/1HNYDUVUSKz9JTHieH7t8zYIt06KFTeOxExSCO6ZjatU/edit#gid=1796226786
+
+TODO: write a more detailed intro. Also, ALIA's CARNIVAL has commands without the `@` prefix.
+
 ## Alternatives
 
-There are alternatives to this project, which support different versions of the engine:
+There are alternatives to this project, which support other versions of the engine:
 
-- [ShinDataUtil](https://github.com/DCNick3/ShinDataUtil) (by me) has full support for (almost?) all formats used by switch's Higurashi Hou and Konosuba
-- [sdu](https://github.com/DCNick3/shin#what-else-is-in-the-box) (also by me) has support for extraction (but not creation) of most formats used by switch's Umineko
-- [enter_extractor](https://github.com/07th-mod/enter_extractor) (by 07th-mod) has support for extraction and patching of most formats across several versions of the engine
-- [kaleido](https://gitlab.com/Neurochitin/kaleido/) (by Neurochitin) has support for scenario translation of vita's umineko and vita and switch's Kaleido 
+- [ShinDataUtil](https://github.com/DCNick3/ShinDataUtil) (by me) has full support for (almost?) all formats used by
+  switch's Higurashi Hou and Konosuba
+- [sdu](https://github.com/DCNick3/shin#what-else-is-in-the-box) (also by me) has support for extraction (but not
+  creation) of most formats used by switch's Umineko
+- [enter_extractor](https://github.com/07th-mod/enter_extractor) (by 07th-mod) has support for extraction and patching
+  of most formats across several versions of the engine
+- [kaleido](https://gitlab.com/Neurochitin/kaleido/) (by Neurochitin) has support for scenario translation of vita's
+  umineko and vita and switch's Kaleido
 
 ## License
 

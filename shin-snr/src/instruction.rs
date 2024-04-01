@@ -956,7 +956,7 @@ pub fn react_instr<R: Reactor>(ctx: &mut Ctx<R>, instr: Instruction) {
         #[allow(unreachable_patterns)]
         cmd => {
             panic!(
-                "Unimplemented instruction {:?} @ {}",
+                "Unimplemented instruction {:?} @ 0x{:08x}",
                 cmd,
                 ctx.in_location()
             );

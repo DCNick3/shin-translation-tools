@@ -84,6 +84,12 @@ pub trait RewriteMode {
         s
     }
 
+    fn uint(&mut self, s: u32) -> u32 {
+        self.write(&s.to_le_bytes());
+
+        s
+    }
+
     fn reg(&mut self, r: u16) {
         self.short(r);
     }
@@ -248,7 +254,7 @@ impl<'a, R: StringRewriter, M: RewriteMode> Reactor for RewriteReactor<'a, R, M>
     }
 
     fn uint(&mut self) -> u32 {
-        self.reader.uint()
+        self.mode.uint(self.reader.uint())
     }
 
     fn reg(&mut self) {
