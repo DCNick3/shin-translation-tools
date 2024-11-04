@@ -83,9 +83,8 @@ impl ShinVersion {
     pub fn mm_gt_st_length(&self) -> LengthKind {
         match self {
             ShinVersion::AliasCarnival => LengthKind::U8Length,
-            ShinVersion::WhiteEternity | ShinVersion::DC4 => LengthKind::U16Length,
-            ShinVersion::Konosuba => {
-                todo!()
+            ShinVersion::WhiteEternity | ShinVersion::DC4 | ShinVersion::Konosuba => {
+                LengthKind::U16Length
             }
         }
     }
@@ -125,7 +124,14 @@ impl ShinVersion {
                 // I _believe_ the SNR does not use any strings using the fixup encoding with this command
                 Chatset => (U16Length, false),
             },
-            Konosuba => todo!(),
+            Konosuba => match kind {
+                Saveinfo | SelectTitle | Dbgout | Voiceplay => (U8Length, false),
+                Msgset => (U16Length, false),
+                Chatset | Logset | Named | Stageinfo => {
+                    // not in this game
+                    unreachable!()
+                }
+            },
         };
 
         StringStyle {
@@ -150,7 +156,9 @@ impl ShinVersion {
             DC4 => match kind {
                 SelectChoices => (U16Length, false),
             },
-            Konosuba => todo!(),
+            Konosuba => match kind {
+                SelectChoices => (U8Length, false),
+            },
         };
 
         StringStyle {

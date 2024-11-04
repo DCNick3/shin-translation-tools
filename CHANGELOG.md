@@ -1,3 +1,7 @@
+# Unreleased
+
+- Adds support for Konosuba switch scenarios (`01004920105FC000`, released on 2020-08-27)
+
 # Version 0.6.0
 
 - Adds support for ALIA's CARNIVAL ps vita scenarios (`PCSG00628`, released on 2015-10-29)

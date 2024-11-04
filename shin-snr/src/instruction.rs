@@ -117,6 +117,9 @@ pub enum Instruction {
     LAYERSWAP,
     LAYERSELECT,
     MOVIEWAIT,
+    // mid-version? Before we had planes, but no LAYERSWAP
+    // I think konosuba and higurashi have this
+    LAYERBACK,
     // "new" plane-related commands
     TRANSSET,
     TRANSWAIT,
@@ -147,6 +150,10 @@ pub enum Instruction {
 
     // DC4
     CHATSET,
+
+    // Konosuba
+    SLEEP,
+    VSET,
 
     // this is the last thing in the opcode space
     DEBUGOUT,
@@ -427,9 +434,75 @@ pub fn decode_instr(version: ShinVersion, opcode: u8) -> Option<Instruction> {
             0xff => DEBUGOUT,
             _ => return None,
         }),
-        ShinVersion::Konosuba => {
-            todo!()
-        }
+        ShinVersion::Konosuba => Some(match opcode {
+            0x00 => EXIT,
+
+            0x40 => uo,
+            0x41 => bo,
+            0x42 => exp,
+            0x43 => mm,
+            0x44 => gt,
+            0x45 => st,
+            0x46 => jc,
+            0x47 => j,
+            0x48 => gosub,
+            0x49 => retsub,
+            0x4a => jt,
+            0x4b => gosubt,
+            0x4c => rnd,
+            0x4d => push,
+            0x4e => pop,
+            0x4f => call,
+            0x50 => r#return,
+            // those exist, but let's hope they are not used
+            0x51 => todo!(),
+            0x52 => todo!(),
+            0x53 => getbupid,
+
+            // ===
+            // Commands
+            0x80 => SGET,
+            0x81 => SSET,
+            0x82 => WAIT,
+            0x83 => MSGINIT,
+            0x84 => MSGSET,
+            0x85 => MSGWAIT,
+            0x86 => MSGSIGNAL,
+            0x87 => MSGCLOSE,
+            0x88 => SELECT,
+            0x89 => WIPE,
+            0x8a => WIPEWAIT,
+
+            0x90 => BGMPLAY,
+            0x91 => BGMSTOP,
+            0x92 => BGMVOL,
+            0x93 => BGMWAIT,
+            0x94 => BGMSYNC,
+            0x95 => SEPLAY,
+            0x96 => SESTOP,
+            0x97 => SESTOPALL,
+            0x98 => SEVOL,
+            0x99 => SEPAN,
+            0x9a => SEWAIT,
+            0x9b => SEONCE,
+            0x9c => VOICEPLAY,
+            0x9d => VOICESTOP,
+            0x9e => VOICEWAIT,
+
+            0xc0 => LAYERINIT,
+            0xc1 => LAYERLOAD,
+            0xc2 => LAYERUNLOAD,
+            0xc3 => LAYERCTRL,
+            0xc4 => LAYERWAIT,
+            0xc5 => LAYERBACK,
+            0xc6 => LAYERSELECT,
+            0xc7 => MOVIEWAIT,
+
+            0xe0 => SLEEP,
+            0xe1 => VSET,
+
+            _ => return None,
+        }),
     }
 }
 
@@ -571,7 +644,7 @@ pub fn react_instr<R: Reactor>(ctx: &mut Ctx<R>, instr: Instruction) {
                 ctx.number();
             }
             ShinVersion::Konosuba => {
-                todo!()
+                ctx.number();
             }
         },
         Instruction::SGET => {
@@ -584,12 +657,9 @@ pub fn react_instr<R: Reactor>(ctx: &mut Ctx<R>, instr: Instruction) {
         }
         Instruction::WAIT => match ctx.version() {
             ShinVersion::AliasCarnival => ctx.number(),
-            ShinVersion::WhiteEternity | ShinVersion::DC4 => {
+            ShinVersion::WhiteEternity | ShinVersion::DC4 | ShinVersion::Konosuba => {
                 ctx.byte();
                 ctx.number();
-            }
-            ShinVersion::Konosuba => {
-                todo!()
             }
         },
         Instruction::KEYWAIT => match ctx.version() {
@@ -604,11 +674,8 @@ pub fn react_instr<R: Reactor>(ctx: &mut Ctx<R>, instr: Instruction) {
                 ctx.number();
                 ctx.number();
             }
-            ShinVersion::DC4 => {
+            ShinVersion::DC4 | ShinVersion::Konosuba => {
                 ctx.number();
-            }
-            ShinVersion::Konosuba => {
-                todo!()
             }
         },
         Instruction::MSGSET => {
@@ -627,7 +694,7 @@ pub fn react_instr<R: Reactor>(ctx: &mut Ctx<R>, instr: Instruction) {
                     ctx.number();
                 }
                 ShinVersion::Konosuba => {
-                    todo!()
+                    // nothing here
                 }
             }
 
@@ -643,11 +710,8 @@ pub fn react_instr<R: Reactor>(ctx: &mut Ctx<R>, instr: Instruction) {
         }
         Instruction::MSGCLOSE => match ctx.version() {
             ShinVersion::AliasCarnival => {}
-            ShinVersion::WhiteEternity | ShinVersion::DC4 => {
+            ShinVersion::WhiteEternity | ShinVersion::DC4 | ShinVersion::Konosuba => {
                 ctx.byte();
-            }
-            ShinVersion::Konosuba => {
-                todo!()
             }
         },
         Instruction::MSGCHECK => {
@@ -730,7 +794,7 @@ pub fn react_instr<R: Reactor>(ctx: &mut Ctx<R>, instr: Instruction) {
                 ctx.number();
                 ctx.number();
             }
-            ShinVersion::DC4 => {
+            ShinVersion::DC4 | ShinVersion::Konosuba => {
                 // 7x number
                 ctx.number();
                 ctx.number();
@@ -739,9 +803,6 @@ pub fn react_instr<R: Reactor>(ctx: &mut Ctx<R>, instr: Instruction) {
                 ctx.number();
                 ctx.number();
                 ctx.number();
-            }
-            ShinVersion::Konosuba => {
-                todo!()
             }
         },
         Instruction::SESTOP => {
@@ -777,15 +838,12 @@ pub fn react_instr<R: Reactor>(ctx: &mut Ctx<R>, instr: Instruction) {
                 ctx.number();
                 ctx.number();
             }
-            ShinVersion::DC4 => {
+            ShinVersion::DC4 | ShinVersion::Konosuba => {
                 ctx.number();
                 ctx.number();
                 ctx.number();
                 ctx.number();
                 ctx.number();
-            }
-            ShinVersion::Konosuba => {
-                todo!()
             }
         },
         Instruction::UNK9B => {
@@ -847,6 +905,9 @@ pub fn react_instr<R: Reactor>(ctx: &mut Ctx<R>, instr: Instruction) {
         }
         Instruction::LAYERSWAP => {
             ctx.number();
+            ctx.number();
+        }
+        Instruction::LAYERBACK => {
             ctx.number();
         }
         Instruction::LAYERSELECT => {
@@ -937,20 +998,30 @@ pub fn react_instr<R: Reactor>(ctx: &mut Ctx<R>, instr: Instruction) {
         // DC4
         Instruction::CHATSET => ctx.string(StringSource::Chatset),
 
+        // Konosuba
+        Instruction::SLEEP => {
+            ctx.short();
+            ctx.number();
+            ctx.number();
+            ctx.number();
+            ctx.number();
+        }
+        Instruction::VSET => {
+            ctx.number();
+            ctx.number();
+        }
+
         Instruction::DEBUGOUT => match ctx.version() {
             ShinVersion::AliasCarnival => {
                 ctx.string(StringSource::Dbgout);
                 ctx.short();
             }
-            ShinVersion::WhiteEternity | ShinVersion::DC4 => {
+            ShinVersion::WhiteEternity | ShinVersion::DC4 | ShinVersion::Konosuba => {
                 ctx.string(StringSource::Dbgout);
                 let count = ctx.byte();
                 for _ in 0..count {
                     ctx.number();
                 }
-            }
-            ShinVersion::Konosuba => {
-                todo!()
             }
         },
         #[allow(unreachable_patterns)]
