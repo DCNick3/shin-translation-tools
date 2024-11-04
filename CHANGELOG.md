@@ -1,4 +1,4 @@
-# Unreleased
+# Version 0.7.0
 
 - Adds support for Konosuba switch scenarios (`01004920105FC000`, released on 2020-08-27)
 
