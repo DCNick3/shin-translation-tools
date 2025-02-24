@@ -165,7 +165,7 @@ impl<R: StringRewriter> Stringer<R> {
         fixup: bool,
         original: &'s [u8],
         source: StringSource,
-    ) -> &[u8] {
+    ) -> &'s [u8] {
         assert_eq!(
             original.last().copied(),
             Some(0),
