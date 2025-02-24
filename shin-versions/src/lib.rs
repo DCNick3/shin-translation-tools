@@ -18,6 +18,8 @@ use arrayref::array_ref;
 #[derive(Debug, Copy, Clone, Ord, PartialOrd, Eq, PartialEq)]
 #[cfg_attr(feature = "clap", derive(clap::ValueEnum))]
 pub enum ShinVersion {
+    /// 2015-01-28 PSVita `PCSG00517`
+    HigurashiSui,
     /// 2015-10-29 PSVita `PCSG00628`
     AliasCarnival,
     /// 2016-09-22 PSVita `PCSG00901`
@@ -74,18 +76,18 @@ impl ShinVersion {
         use ShinVersion::*;
 
         match self {
-            AliasCarnival | WhiteEternity => Short,
+            HigurashiSui | AliasCarnival | WhiteEternity => Short,
             DC4 | Konosuba => VarInt,
         }
     }
 
     /// The type of the length field for mm, gt and st instructions
     pub fn mm_gt_st_length(&self) -> LengthKind {
+        use ShinVersion::*;
+
         match self {
-            ShinVersion::AliasCarnival => LengthKind::U8Length,
-            ShinVersion::WhiteEternity | ShinVersion::DC4 | ShinVersion::Konosuba => {
-                LengthKind::U16Length
-            }
+            HigurashiSui | AliasCarnival => LengthKind::U8Length,
+            WhiteEternity | DC4 | Konosuba => LengthKind::U16Length,
         }
     }
 
@@ -95,6 +97,14 @@ impl ShinVersion {
         use StringKind::*;
 
         let (length_size, fixup) = match self {
+            HigurashiSui => match kind {
+                Saveinfo | SelectTitle | Voiceplay => (U8Length, false),
+                Logset => (U16Length, true),
+                Msgset => (U16Length, true),
+                Dbgout | Chatset | Named | Stageinfo => {
+                    unreachable!()
+                }
+            },
             AliasCarnival => match kind {
                 Saveinfo | SelectTitle | Dbgout | Voiceplay | Stageinfo => (U8Length, false),
                 // maybe it's fixed up?
@@ -146,6 +156,9 @@ impl ShinVersion {
         use StringArrayKind::*;
 
         let (length_size, fixup) = match self {
+            HigurashiSui => match kind {
+                SelectChoices => (U8Length, true),
+            },
             AliasCarnival => match kind {
                 // TODO: fixups? really?
                 SelectChoices => (U8Length, true),
@@ -171,6 +184,7 @@ impl ShinVersion {
         use RomVersion::*;
         use ShinVersion::*;
         Some(match self {
+            HigurashiSui => Rom2V1_0,
             AliasCarnival => Rom2V1_0,
             WhiteEternity => Rom2V1_0,
             DC4 => Rom2V1_1,

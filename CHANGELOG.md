@@ -1,3 +1,7 @@
+# Unreleased
+
+- Adds support for Higurashi no Naku Koro ni Sui ps vita scenarios (`PCSG00517`, released on 2015-01-28)
+
 # Version 0.7.0
 
 - Adds support for Konosuba switch scenarios (`01004920105FC000`, released on 2020-08-27)
