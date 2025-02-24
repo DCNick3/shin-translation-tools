@@ -66,13 +66,12 @@ separately. See "shin-tl snr support" column
 in [this spreadsheet](https://docs.google.com/spreadsheets/d/1wGX9FOQq_iXcWMnY9qITCAV7hq1R7_gpWwjkT4_tKDI/edit#gid=0) to
 find out which games are supported.
 
-Af of writing this readme, vita versions of "AstralAir no Shiroki Towa -White Eternity-" and "ALIA's CARNIVAL!
-Sacrament" along with switch
-version of "D.C.4 -Da Capo 4-" are supported.
+Af of writing this readme, vita versions of "AstralAir no Shiroki Towa -White Eternity-", "ALIA's CARNIVAL!
+Sacrament" amd "Higurashi no Naku Koro ni Sui" along with switch version of "D.C.4 -Da Capo 4-" are supported.
 
-A note on ALIA's CARNICAL support: due to the way that engine version is coded, most english characters will be
-interpreted as commands. This won't allow an English translation without additional hacks.
-See https://github.com/DCNick3/shin-translation-tools/issues/3.
+A note on ALIA's CARNICAL and Higurashi no Naku Koro ni Sui support: due to the way that engine version is coded, most
+half-width (normal) english characters will be interpreted as commands. You'll need to
+use [fill-width](https://en.wikipedia.org/wiki/Halfwidth_and_fullwidth_forms) latin characters to avoid that.
 
 If you want to translate some of the games this engine uses, let me know, so I can prioritize support for that game.
 
@@ -86,7 +85,7 @@ On Switch, you would need to first dump the game with [nxdumptool](https://githu
 then extract the romfs files with [hactoolnet](https://github.com/Thealexbarney/LibHac).
 
 shin engine usually packages its files into one or two `.rom` files: `data.rom` and sometimes `patch.rom`. You would
-need to extract them first.
+need to obtain them first.
 
 After you have obtained the rom files, `shin-tl` can already handle them
 
@@ -196,7 +195,7 @@ On Switch you would use LayeredFS mods to do that.
 
 See https://docs.google.com/spreadsheets/d/1HNYDUVUSKz9JTHieH7t8zYIt06KFTeOxExSCO6ZjatU/edit#gid=1796226786
 
-TODO: write a more detailed intro. Also, ALIA's CARNIVAL has commands without the `@` prefix.
+TODO: write a more detailed intro. Also, ALIA's CARNIVAL and Higurashi Sui has commands without the `@` prefix.
 
 ## Alternatives
 
@@ -209,7 +208,7 @@ There are alternatives to this project, which support other versions of the engi
 - [enter_extractor](https://github.com/07th-mod/enter_extractor) (by 07th-mod) has support for extraction and patching
   of most formats across several versions of the engine
 - [kaleido](https://gitlab.com/Neurochitin/kaleido/) (by Neurochitin) has support for scenario translation of vita's
-  umineko and vita and switch's Kaleido
+  umineko and vita and switch's Kaleido. There's also code to generate FNT files
 
 ## License
 
