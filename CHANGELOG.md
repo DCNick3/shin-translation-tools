@@ -1,4 +1,4 @@
-# Unreleased
+# Version 0.8.0
 
 - Adds support for Higurashi no Naku Koro ni Sui ps vita scenarios (`PCSG00517`, released on 2015-01-28)
 
