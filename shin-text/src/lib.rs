@@ -3,27 +3,36 @@
 //! (copied from shin: https://github.com/DCNick3/shin/blob/master/shin-core/src/format/text/mod.rs)
 // Maybe it should be polished and made into a separate library?
 
-use std::{collections::HashMap, io};
+use std::io;
 
 use bumpalo::Bump;
-use once_cell::sync::Lazy;
 
 include!("decode_tables.rs");
 include!("encode_tables.rs");
 
+const ASCII_START: u8 = 0x20;
+const ASCII_END: u8 = 0x80;
+const KATAKANA_START: u8 = 0xa0;
+const KATAKANA_END: u8 = 0xe0;
+
 #[inline]
-fn decode_single_sjis_char(c: u8) -> char {
+fn decode_single_sjis_char(c: u8, fixup: bool) -> char {
     if c < 0x20 {
         // SAFETY: c < 0x20, so it is safe to construct such a char
         unsafe { char::from_u32_unchecked(c as u32) }
-    } else if (0x20..0x80).contains(&c) {
+    } else if (ASCII_START..ASCII_END).contains(&c) {
         let index = (c - 0x20) as usize;
         // SAFETY: index < 0x60, so it is safe to access the table
         unsafe { *ASCII_TABLE.get_unchecked(index) }
-    } else if (0xa0..0xe0).contains(&c) {
+    } else if (KATAKANA_START..KATAKANA_END).contains(&c) {
         let index = (c - 0xa0) as usize;
-        // SAFETY: index < 0x40, so it is safe to access the table
-        unsafe { *KATAKANA_TABLE.get_unchecked(index) }
+        if fixup {
+            // SAFETY: index < 0x40, so it is safe to access the table
+            unsafe { *FIXUP_KATAKANA_TABLE.get_unchecked(index) }
+        } else {
+            // SAFETY: index < 0x40, so it is safe to access the table
+            unsafe { *KATAKANA_TABLE.get_unchecked(index) }
+        }
     } else {
         // unmapped, no such first byte
         '\0'
@@ -99,7 +108,7 @@ pub fn decode_sjis_zstring<'bump>(
             }
             utf8_c
         } else {
-            let utf8_c = decode_single_sjis_char(c1);
+            let utf8_c = decode_single_sjis_char(c1, fixup);
             if utf8_c == '\0' {
                 return Err(io::Error::new(
                     io::ErrorKind::InvalidData,
@@ -109,11 +118,7 @@ pub fn decode_sjis_zstring<'bump>(
             utf8_c
         };
 
-        res.push(if fixup {
-            FIXUP_DECODE_TABLE.get(&utf8_c).copied().unwrap_or(utf8_c)
-        } else {
-            utf8_c
-        });
+        res.push(utf8_c);
     }
 
     Ok(res)
@@ -188,20 +193,22 @@ pub fn encode_sjis_string<'bump>(
     let mut output = bumpalo::collections::Vec::with_capacity_in(s.len(), bump);
 
     for c in s.chars() {
-        let c = if fixup {
-            FIXUP_ENCODE_TABLE.get(&c).copied().unwrap_or(c)
-        } else {
-            c
-        };
-
         // NOTE: the game impl emits ※ (81A6 in Shift-JIS) for unmappable chars
         // we are more conservative and just error out
-        let sjis = map_char_to_sjis(c).ok_or_else(|| {
+        let mut sjis = map_char_to_sjis(c).ok_or_else(|| {
             io::Error::new(
                 io::ErrorKind::InvalidData,
                 format!("unmappable char: {} (U+{:04X})", c, c as u32),
             )
         })?;
+
+        // apply fixup
+        // TODO: this might be slow
+        if fixup {
+            if let Some(position) = SJIS_FIXUP_ENTRIES.iter().position(|&c| c == sjis) {
+                sjis = (KATAKANA_START + position as u8) as u16;
+            }
+        }
 
         match sjis {
             0x00..=0xff => {
@@ -237,42 +244,6 @@ pub fn encode_sjis_zstring<'bump>(
     Ok(output)
 }
 
-const FIXUP_ENCODED: &str =
-    "\u{f8f0}｡｢｣､･ｦｧｨｩｪｫｬｭｮｯｰｱｲｳｴｵｶｷｸｹｺｻｼｽｾｿﾀﾁﾂﾃﾄﾅﾆﾇﾈﾉﾊﾋﾌﾍﾎﾏﾐﾑﾒﾓﾔﾕﾖﾗﾘﾙﾚﾛﾜﾝﾞﾟ";
-const FIXUP_DECODED: &str = "\u{3000}。「」、…をぁぃぅぇぉゃゅょっーあいうえおかきくけこさしすせそたちつてとなにぬねのはひふへほまみむめもやゆよらりるれろわん！？";
-
-static FIXUP_DECODE_TABLE: Lazy<HashMap<char, char>> =
-    Lazy::new(|| FIXUP_ENCODED.chars().zip(FIXUP_DECODED.chars()).collect());
-
-static FIXUP_ENCODE_TABLE: Lazy<HashMap<char, char>> =
-    Lazy::new(|| FIXUP_DECODED.chars().zip(FIXUP_ENCODED.chars()).collect());
-
-/// Apply transformations that the game does to some strings
-/// This basically involves replacing hiragana with half-width katakana (and some other chars), which is encoded as one byte in Shift-JIS
-pub fn encode_string_fixup<'bump>(
-    bump: &'bump Bump,
-    s: &str,
-) -> bumpalo::collections::String<'bump> {
-    bumpalo::collections::String::from_iter_in(
-        s.chars()
-            .map(|c| FIXUP_ENCODE_TABLE.get(&c).copied().unwrap_or(c)),
-        bump,
-    )
-}
-
-/// Apply transformations that the game does to some strings
-/// This basically involves replacing  
-pub fn decode_string_fixup<'bump>(
-    bump: &'bump Bump,
-    s: &str,
-) -> bumpalo::collections::String<'bump> {
-    bumpalo::collections::String::from_iter_in(
-        s.chars()
-            .map(|c| FIXUP_DECODE_TABLE.get(&c).copied().unwrap_or(c)),
-        bump,
-    )
-}
-
 #[cfg(test)]
 mod tests {
     #[allow(unused)]
@@ -280,7 +251,7 @@ mod tests {
 
     #[test]
     fn test_sjis() {
-        let mut bump = Bump::new();
+        let bump = Bump::new();
         let s = b"\x82\xa0\x82\xa2\x82\xa4\x82\xa6\x82\xa8\x00";
         let s = decode_sjis_zstring(&bump, s, false).unwrap();
         assert_eq!(s, "あいうえお");
