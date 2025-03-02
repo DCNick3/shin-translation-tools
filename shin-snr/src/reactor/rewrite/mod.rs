@@ -1,12 +1,14 @@
 mod csv_rewriter;
+mod noop_rewriter;
 mod x_rewriter;
 
 use std::{collections::HashMap, io};
 
 use bumpalo::{collections::Vec, Bump};
-use shin_text::encode_sjis_zstring;
+use shin_text::{decode_sjis_zstring, encode_sjis_zstring, FixupDetectResult};
+use shin_versions::{MessageCommandStyle, MessageFixupPolicy};
 
-pub use self::{csv_rewriter::CsvRewriter, x_rewriter::XRewriter};
+pub use self::{csv_rewriter::CsvRewriter, noop_rewriter::NoopRewriter, x_rewriter::XRewriter};
 use crate::{
     reactor::{Reactor, StringArraySource, StringSource},
     reader::Reader,
@@ -48,19 +50,21 @@ impl OffsetMap {
 }
 
 pub trait StringRewriter {
-    fn rewrite_string<'a>(
-        &'a self,
-        bump: &'a Bump,
+    fn rewrite_string<'bump>(
+        &'bump self,
+        bump: &'bump Bump,
+        decoded: &'bump str,
         instr_index: u32,
         instr_offset: u32,
         source: StringSource,
-    ) -> Option<&'a str>;
+    ) -> Option<&'bump str>;
 }
 
 impl StringRewriter for () {
     fn rewrite_string<'bump>(
         &self,
         _bump: &'bump Bump,
+        _decoded: &'bump str,
         _instr_index: u32,
         _instr_offset: u32,
         _source: StringSource,
@@ -143,10 +147,21 @@ impl<W: io::Write> RewriteMode for EmitMode<W> {
 
 struct Stringer<R> {
     bump: Bump,
+    style: MessageCommandStyle,
+    policy: MessageFixupPolicy,
     rewriter: R,
 }
 
 impl<R> Stringer<R> {
+    pub fn new(style: MessageCommandStyle, policy: MessageFixupPolicy, rewriter: R) -> Self {
+        Self {
+            bump: Bump::new(),
+            style,
+            policy,
+            rewriter,
+        }
+    }
+
     pub fn reset(mut self) -> Self {
         self.bump.reset();
         self
@@ -172,13 +187,26 @@ impl<R: StringRewriter> Stringer<R> {
             "string is not zero-terminated"
         );
 
+        let original_decoded = decode_sjis_zstring(&self.bump, original, fixup).unwrap();
         let result = if let Some(s) = self.rewriter.rewrite_string(
             &self.bump,
+            &original_decoded,
             position.current_str_index,
             position.current_instr_offset,
             source,
         ) {
-            encode_sjis_zstring(&self.bump, s, fixup)
+            let mut fixup_detect_result = FixupDetectResult::NoFixupCharacters;
+            shin_text::detect_fixup(original, &mut fixup_detect_result).unwrap();
+
+            let fixup_policy = crate::message_parser::infer_string_fixup_policy(
+                &self.bump,
+                &original_decoded,
+                self.style,
+                self.policy,
+                fixup_detect_result,
+                source,
+            );
+            encode_sjis_zstring(&self.bump, s, fixup_policy)
                 .unwrap()
                 .into_bump_slice()
         } else {
@@ -206,15 +234,18 @@ pub struct RewriteReactor<'a, R, M> {
 }
 
 impl<'a, R> RewriteReactor<'a, R, BuildOffsetMapMode> {
-    pub fn new(reader: Reader<'a>, rewriter: R, initial_out_position: u32) -> Self {
+    pub fn new(
+        reader: Reader<'a>,
+        style: MessageCommandStyle,
+        policy: MessageFixupPolicy,
+        rewriter: R,
+        initial_out_position: u32,
+    ) -> Self {
         let initial_in_position = reader.position();
         Self {
             reader,
             position: Default::default(),
-            stringer: Stringer {
-                bump: Bump::new(),
-                rewriter,
-            },
+            stringer: Stringer::new(style, policy, rewriter),
             mode: BuildOffsetMapMode {
                 builder: OffsetMapBuilder::new(),
                 initial_in_position,

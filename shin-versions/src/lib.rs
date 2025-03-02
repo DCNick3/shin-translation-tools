@@ -31,6 +31,7 @@ pub enum ShinVersion {
 }
 
 /// Describes how `NumberSpec` is encoded in a particular version
+#[derive(Debug, Copy, Clone)]
 pub enum NumberSpecStyle {
     /// `NumberSpec` is stored just as a `u16`. If it's smaller than `0x8000` (I think?) it is a literal, otherwise it is a register reference.
     Short,
@@ -38,6 +39,7 @@ pub enum NumberSpecStyle {
     VarInt,
 }
 
+#[derive(Debug, Copy, Clone)]
 pub enum StringKind {
     Saveinfo,
     // NOTE: this is only for the choice title, not the choices themselves, as they are encoded as an array
@@ -56,18 +58,33 @@ pub enum StringKind {
     Stageinfo,
 }
 
+#[derive(Debug, Copy, Clone)]
 pub enum StringArrayKind {
     SelectChoices,
 }
 
 /// Describes how a particular string kind is encoded
+#[derive(Debug, Copy, Clone)]
 pub struct StringStyle {
     pub size_kind: LengthKind,
     pub fixup: bool,
 }
+#[derive(Debug, Copy, Clone)]
 pub enum LengthKind {
     U8Length,
     U16Length,
+}
+
+#[derive(Debug, Copy, Clone)]
+pub struct MessageFixupPolicy {
+    pub fixup_command_arguments: bool,
+    pub fixup_character_names: bool,
+}
+
+#[derive(Debug, Copy, Clone)]
+pub enum MessageCommandStyle {
+    Escaped,
+    Unescaped,
 }
 
 impl ShinVersion {
@@ -157,14 +174,13 @@ impl ShinVersion {
 
         let (length_size, fixup) = match self {
             HigurashiSui => match kind {
-                SelectChoices => (U8Length, true),
+                SelectChoices => (U8Length, false),
             },
             AliasCarnival => match kind {
-                // TODO: fixups? really?
-                SelectChoices => (U8Length, true),
+                SelectChoices => (U8Length, false),
             },
             WhiteEternity => match kind {
-                SelectChoices => (U8Length, true),
+                SelectChoices => (U8Length, false),
             },
             DC4 => match kind {
                 SelectChoices => (U16Length, false),
@@ -177,6 +193,41 @@ impl ShinVersion {
         StringStyle {
             size_kind: length_size,
             fixup,
+        }
+    }
+
+    pub fn message_fixup_policy(&self) -> MessageFixupPolicy {
+        match self {
+            ShinVersion::HigurashiSui => MessageFixupPolicy {
+                fixup_command_arguments: false,
+                fixup_character_names: false,
+            },
+            ShinVersion::AliasCarnival => MessageFixupPolicy {
+                fixup_command_arguments: false,
+                fixup_character_names: false,
+            },
+            ShinVersion::WhiteEternity => MessageFixupPolicy {
+                fixup_command_arguments: false,
+                fixup_character_names: true,
+            },
+            ShinVersion::DC4 => MessageFixupPolicy {
+                fixup_command_arguments: true,
+                fixup_character_names: false,
+            },
+            ShinVersion::Konosuba => {
+                todo!()
+            }
+        }
+    }
+
+    pub fn message_command_style(&self) -> MessageCommandStyle {
+        match self {
+            ShinVersion::HigurashiSui | ShinVersion::AliasCarnival => {
+                MessageCommandStyle::Unescaped
+            }
+            ShinVersion::WhiteEternity | ShinVersion::DC4 | ShinVersion::Konosuba => {
+                MessageCommandStyle::Escaped
+            }
         }
     }
 

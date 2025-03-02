@@ -100,13 +100,14 @@ impl CsvRewriter {
 }
 
 impl StringRewriter for CsvRewriter {
-    fn rewrite_string<'a>(
-        &'a self,
-        _bump: &'a Bump,
+    fn rewrite_string<'bump>(
+        &'bump self,
+        _bump: &'bump Bump,
+        _decoded: &'bump str,
         instr_index: u32,
         instr_offset: u32,
         source: StringSource,
-    ) -> Option<&'a str> {
+    ) -> Option<&'bump str> {
         let entry = self.entries.get(&instr_index)?;
         assert_eq!(entry.offset, instr_offset);
         assert_eq!(entry.source, source);

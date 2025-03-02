@@ -8,8 +8,10 @@ use clap::{Args, Subcommand};
 use shin_snr::{
     react_with,
     reactor::{
+        location_painter::LocationPainterReactor,
         offset_validator::OffsetValidatorReactor,
-        rewrite::{CsvRewriter, RewriteReactor},
+        rewrite::{CsvRewriter, NoopRewriter, RewriteReactor, StringRewriter},
+        string_roundrip_validator::StringRoundtripValidatorReactor,
         trace::{ConsoleTraceListener, CsvTraceListener, StringTraceReactor},
     },
     reader::Reader,
@@ -55,6 +57,13 @@ pub enum Command {
         #[clap(flatten)]
         common: CommonArgs,
     },
+    /// Run shin-tl tests on an SNR file
+    ///
+    /// This command is only intended to be used for testing shin-tl itself, not of any use to end users
+    Test {
+        #[clap(flatten)]
+        common: CommonArgs,
+    },
     /// Rewrite an SNR file to use translated strings from a CSV file
     Rewrite {
         #[clap(flatten)]
@@ -64,12 +73,122 @@ pub enum Command {
     },
 }
 
+fn rewrite_snr<R, O>(
+    snr_file: &[u8],
+    reader: Reader,
+    code_offset: u32,
+    version: ShinVersion,
+    rewriter: R,
+    mut output: &mut O,
+) where
+    R: StringRewriter,
+    O: Write + Seek,
+{
+    let mut reactor = RewriteReactor::new(
+        reader,
+        version.message_command_style(),
+        version.message_fixup_policy(),
+        rewriter,
+        code_offset,
+    );
+    react_with(&mut reactor, version);
+
+    let output_size = reactor.output_size().next_multiple_of(16);
+
+    // copy the magic
+    output
+        .write_all(&snr_file[0..4])
+        .expect("Writing to the output file failed");
+    // re-write with the correct file sizes
+    // even though some engine versions do not care about this fields, some absolutely do!
+    // (for example, DC4)
+    output
+        .write_all(&output_size.to_le_bytes())
+        .expect("Writing to the output file failed");
+    // copy the rest of the header
+    output
+        .write_all(&snr_file[8..code_offset as usize])
+        .expect("Writing to the output file failed");
+
+    assert_eq!(
+        code_offset as u64,
+        // this check requires Seek on the output
+        // can we do it without Seek?
+        output.stream_position().unwrap(),
+        "Written header size does not match the expected size"
+    );
+
+    let mut reactor = reactor.into_emit(&mut output);
+    react_with(&mut reactor, version);
+
+    // align the file size to 16 bytes
+    let current_size = output
+        .stream_position()
+        .expect("Getting the current file size failed");
+    let padding = current_size.next_multiple_of(16) - current_size;
+    output
+        .write_all(&vec![0; padding as usize])
+        .expect("Writing to the output file failed");
+
+    assert_eq!(
+        output_size as u64,
+        output.stream_position().unwrap(),
+        "Output file size does not match the expected size"
+    );
+}
+
+fn bindiff_snr(shin_version: ShinVersion, snr1: &[u8], snr2: &[u8]) {
+    let code_offset1 = u32::from_le_bytes(snr1[0x20..0x24].try_into().unwrap());
+    let code_offset2 = u32::from_le_bytes(snr2[0x20..0x24].try_into().unwrap());
+
+    if code_offset1 != code_offset2 {
+        println!(
+            "Code offsets do not match: 0x{:08x} vs 0x{:08x}",
+            code_offset1, code_offset2
+        );
+        return;
+    }
+
+    let code_offset = code_offset1 as usize;
+
+    // 4..8 is file size, so it will often trivially not match; it's not useful for diagnostics though
+    if snr1[8..code_offset] != snr2[8..code_offset] {
+        println!("Headers do not match");
+        return;
+    }
+
+    let reader1 = Reader::new(snr1, code_offset);
+    let reader2 = Reader::new(snr2, code_offset);
+
+    // get positions of instructions and offsets so that we can compare them easier
+    let mut reactor = LocationPainterReactor::new(reader1);
+    react_with(&mut reactor, shin_version);
+    let colors1 = reactor.finish();
+
+    let mut reactor = LocationPainterReactor::new(reader2);
+    react_with(&mut reactor, shin_version);
+    let colors2 = reactor.finish();
+
+    for i in 0..std::cmp::min(colors1.len(), colors2.len()) {
+        if colors1[i] != colors2[i] {
+            println!(
+                "Colors at 0x{:08x} do not match: {:?} vs {:?}",
+                i, colors1[i], colors2[i]
+            );
+            break;
+        }
+    }
+
+    todo!()
+}
+
 impl Command {
     pub fn run(self) {
         let common = match &self {
             Command::Read { common, .. } => common,
             Command::ReadConsole { common, .. } => common,
             Command::ReadValidateOffsets { common, .. } => common,
+            Command::Test { common, .. } => common,
             Command::Rewrite { common, .. } => common,
         };
 
@@ -108,6 +227,44 @@ impl Command {
                     }
                 }
             }
+            Command::Test { common: _ } => {
+                // 1. test string roundtrip
+                let mut reactor = StringRoundtripValidatorReactor::new(
+                    version.message_command_style(),
+                    version.message_fixup_policy(),
+                    reader.clone(),
+                );
+
+                react_with(&mut reactor, version);
+
+                // 2. test SNR roundtrip
+                let rewriter = NoopRewriter::new();
+
+                let mut output = std::io::Cursor::new(Vec::new());
+                rewrite_snr(
+                    &snr_file,
+                    reader,
+                    code_offset,
+                    version,
+                    rewriter,
+                    &mut output,
+                );
+
+                // and, finally, compare the original and the rewritten SNR files
+                let output = output.into_inner();
+
+                if snr_file.as_slice() != output.as_slice() {
+                    let path = std::env::temp_dir().join("main_rewritten.snr");
+                    std::fs::write(&path, &output).expect("Writing the rewritten SNR file failed");
+
+                    println!(
+                        "Rewritten SNR does not match the original, written to {}",
+                        path.display()
+                    );
+
+                    bindiff_snr(version, snr_file.as_slice(), output.as_slice());
+                }
+            }
             Command::Rewrite {
                 common: _,
                 translations,
@@ -117,55 +274,19 @@ impl Command {
                     csv::Reader::from_path(translations).expect("Opening the CSV file failed");
                 let rewriter = CsvRewriter::new(translations);
 
-                let mut reactor = RewriteReactor::new(reader, rewriter, code_offset);
-                react_with(&mut reactor, version);
-
-                let output_size = reactor.output_size().next_multiple_of(16);
-
                 let output = File::create(output).expect("Opening the output file failed");
                 let mut output = BufWriter::new(output);
 
-                // copy the magic
-                output
-                    .write_all(&snr_file[0..4])
-                    .expect("Writing to the output file failed");
-                // re-write with the correct file sizes
-                // even though some engine versions do not care about this fields, some absolutely do!
-                // (for example, DC4)
-                output
-                    .write_all(&output_size.to_le_bytes())
-                    .expect("Writing to the output file failed");
-                // copy the rest of the header
-                output
-                    .write_all(&snr_file[8..code_offset as usize])
-                    .expect("Writing to the output file failed");
-
-                assert_eq!(
-                    code_offset as u64,
-                    output.stream_position().unwrap(),
-                    "Written header size does not match the expected size"
+                rewrite_snr(
+                    &snr_file,
+                    reader,
+                    code_offset,
+                    version,
+                    rewriter,
+                    &mut output,
                 );
 
-                let mut reactor = reactor.into_emit(&mut output);
-                react_with(&mut reactor, version);
-
-                // align the file size to 16 bytes
-                let mut output = output
-                    .into_inner()
-                    .expect("Flushing the output file failed");
-                let current_size = output
-                    .stream_position()
-                    .expect("Getting the current file size failed");
-                let padding = current_size.next_multiple_of(16) - current_size;
-                output
-                    .write_all(&vec![0; padding as usize])
-                    .expect("Writing to the output file failed");
-
-                assert_eq!(
-                    output_size as u64,
-                    output.stream_position().unwrap(),
-                    "Output file size does not match the expected size"
-                );
+                output.flush().unwrap();
             }
         }
     }

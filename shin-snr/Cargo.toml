@@ -15,11 +15,12 @@ license.workspace = true
 shin-versions = { path = "../shin-versions", features = ["clap"] }
 shin-text = { path = "../shin-text" }
 
-once_cell = "1.18.0"
 bumpalo = { workspace = true, features = ["collections"] }
 serde = { version = "1.0.193", features = ["derive"] }
 csv = "1.3.0"
 smallvec = { version = "2.0.0-alpha.1", features = ["write"] }
-camino = { workspace = true }
+
+owo-colors = "4.1.0"
+unicode-width = "0.2.0"
 
 tracing = "0.1.40"

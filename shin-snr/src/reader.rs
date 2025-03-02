@@ -18,7 +18,7 @@ impl<'a> Reader<'a> {
         }
     }
 
-    pub fn take(&mut self, size: usize) -> &[u8] {
+    pub fn take(&mut self, size: usize) -> &'a [u8] {
         let res = &self.data[self.pos..self.pos + size];
         self.pos += size;
         res
@@ -45,13 +45,13 @@ impl<'a> Reader<'a> {
     }
 
     /// Reacts to a string prefixed with u8 length. The returned string is not decoded to utf-8. Zero terminator is included in the returned slice.
-    pub fn u8string(&mut self) -> &[u8] {
+    pub fn u8string(&mut self) -> &'a [u8] {
         let len = self.byte();
         self.take(len as usize)
     }
 
     /// Reacts to a string prefixed with u16 length. The returned string is not decoded to utf-8. Zero terminator is included in the returned slice.
-    pub fn u16string(&mut self) -> &[u8] {
+    pub fn u16string(&mut self) -> &'a [u8] {
         let len = self.short();
         self.take(len as usize)
     }
@@ -61,7 +61,7 @@ impl<'a> Reader<'a> {
     /// String array consists of zero-terminated strings written back-to-back. The array itself is also zero-terminated.
     ///
     /// Example: "foo\0bar\0baz\0\0" -> ["foo", "bar", "baz"]
-    pub fn u8string_array(&mut self) -> &[u8] {
+    pub fn u8string_array(&mut self) -> &'a [u8] {
         let len = self.byte();
         self.take(len as usize)
     }
@@ -71,7 +71,7 @@ impl<'a> Reader<'a> {
     /// String array consists of zero-terminated strings written back-to-back. The array itself is also zero-terminated.
     ///
     /// Example: "foo\0bar\0baz\0\0" -> ["foo", "bar", "baz"]
-    pub fn u16string_array(&mut self) -> &[u8] {
+    pub fn u16string_array(&mut self) -> &'a [u8] {
         let len = self.short();
         self.take(len as usize)
     }
@@ -97,5 +97,9 @@ impl<'a> Reader<'a> {
 
     pub fn position(&self) -> u32 {
         self.pos as u32
+    }
+
+    pub fn size(&self) -> usize {
+        self.data.len()
     }
 }

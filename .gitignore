@@ -2,3 +2,6 @@
 /target
 *.csv
 *.snr
+*.rom
+
+run_snr_tests.bash

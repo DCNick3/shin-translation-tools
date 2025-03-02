@@ -1,7 +1,9 @@
 use shin_versions::{StringArrayKind, StringKind};
 
+pub mod location_painter;
 pub mod offset_validator;
 pub mod rewrite;
+pub mod string_roundrip_validator;
 pub mod trace;
 
 pub trait Reactor {

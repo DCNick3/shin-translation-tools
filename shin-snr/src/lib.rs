@@ -1,5 +1,6 @@
 mod ctx;
 mod instruction;
+mod message_parser;
 pub mod reactor;
 pub mod reader;
 

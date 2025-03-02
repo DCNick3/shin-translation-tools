@@ -89,7 +89,7 @@ pub fn decode_sjis_zstring<'bump>(
         s = &s[..s.len() - 1];
     }
 
-    let mut b = s.iter().cloned();
+    let mut b = s.iter().copied();
     while let Some(c1) = b.next() {
         let utf8_c = if is_extended(c1) {
             let c2 = b.next().ok_or_else(|| {
@@ -122,6 +122,98 @@ pub fn decode_sjis_zstring<'bump>(
     }
 
     Ok(res)
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum FixupDetectResult {
+    NoFixupCharacters,
+    FixedUp,
+    UnfixedUp,
+    Inconsistent,
+}
+
+impl FixupDetectResult {
+    pub fn merge_all(results: &[FixupDetectResult]) -> Self {
+        let mut result = Self::NoFixupCharacters;
+        for &r in results {
+            result.merge(r);
+        }
+        result
+    }
+
+    pub fn merge(&mut self, other: FixupDetectResult) {
+        match (*self, other) {
+            (Self::NoFixupCharacters, something) => {
+                *self = something;
+            }
+            (Self::FixedUp, Self::UnfixedUp) | (Self::UnfixedUp, Self::FixedUp) => {
+                *self = Self::Inconsistent;
+            }
+            _ => {
+                // do nothing
+            }
+        }
+    }
+
+    pub fn resolve(self) -> Option<bool> {
+        match self {
+            FixupDetectResult::NoFixupCharacters | FixupDetectResult::UnfixedUp => Some(false),
+            FixupDetectResult::FixedUp => Some(true),
+            FixupDetectResult::Inconsistent => None,
+        }
+    }
+}
+
+pub trait DetectFixupSink {
+    fn merge(&mut self, other: FixupDetectResult);
+}
+
+impl DetectFixupSink for FixupDetectResult {
+    fn merge(&mut self, other: FixupDetectResult) {
+        FixupDetectResult::merge(self, other);
+    }
+}
+
+impl DetectFixupSink for bumpalo::collections::Vec<'_, FixupDetectResult> {
+    fn merge(&mut self, other: FixupDetectResult) {
+        self.push(other);
+    }
+}
+
+pub fn detect_fixup<S: DetectFixupSink>(mut s: &[u8], sink: &mut S) -> io::Result<()> {
+    while s.last() == Some(&0) {
+        s = &s[..s.len() - 1];
+    }
+
+    let mut b = s.iter().copied();
+    while let Some(c1) = b.next() {
+        let is_double = is_extended(c1);
+
+        let char_result = if is_double {
+            let c2 = b.next().ok_or_else(|| {
+                io::Error::new(
+                    io::ErrorKind::UnexpectedEof,
+                    "unexpected end of string when reading double-byte char",
+                )
+            })?;
+            let c = ((c1 as u16) << 8) | c2 as u16;
+            if SJIS_FIXUP_ENTRIES.contains(&c) {
+                // double character from the fixup range
+                FixupDetectResult::UnfixedUp
+            } else {
+                FixupDetectResult::NoFixupCharacters
+            }
+        } else if (KATAKANA_START..KATAKANA_END).contains(&c1) {
+            // single-char character from the fixup range
+            FixupDetectResult::FixedUp
+        } else {
+            FixupDetectResult::NoFixupCharacters
+        };
+
+        sink.merge(char_result);
+    }
+
+    Ok(())
 }
 
 fn map_char_to_sjis(c: char) -> Option<u16> {
@@ -185,10 +277,44 @@ pub fn measure_sjis_zstring(s: &str) -> io::Result<usize> {
     Ok(result)
 }
 
-pub fn encode_sjis_string<'bump>(
+pub trait FixupEncodePolicy {
+    fn should_fixup(&mut self) -> bool;
+}
+
+impl FixupEncodePolicy for bool {
+    fn should_fixup(&mut self) -> bool {
+        *self
+    }
+}
+
+impl FixupEncodePolicy for &[bool] {
+    fn should_fixup(&mut self) -> bool {
+        let &[result, ref rest @ ..] = *self else {
+            panic!("not enough elements in the fixup policy array");
+        };
+        *self = rest;
+
+        result
+    }
+}
+
+pub struct IterFixupEncodePolicy<T>(pub T);
+
+impl<T> FixupEncodePolicy for IterFixupEncodePolicy<T>
+where
+    T: Iterator<Item = bool>,
+{
+    fn should_fixup(&mut self) -> bool {
+        self.0.next().unwrap_or_else(|| {
+            panic!("not enough elements in the fixup policy iterator");
+        })
+    }
+}
+
+pub fn encode_sjis_string<'bump, P: FixupEncodePolicy>(
     bump: &'bump Bump,
     s: &str,
-    fixup: bool,
+    mut fixup: P,
 ) -> io::Result<bumpalo::collections::Vec<'bump, u8>> {
     let mut output = bumpalo::collections::Vec::with_capacity_in(s.len(), bump);
 
@@ -204,7 +330,7 @@ pub fn encode_sjis_string<'bump>(
 
         // apply fixup
         // TODO: this might be slow
-        if fixup {
+        if fixup.should_fixup() {
             if let Some(position) = SJIS_FIXUP_ENTRIES.iter().position(|&c| c == sjis) {
                 sjis = (KATAKANA_START + position as u8) as u16;
             }
@@ -232,10 +358,10 @@ pub fn encode_sjis_string<'bump>(
 }
 
 /// Encode a string in Shift-JIS
-pub fn encode_sjis_zstring<'bump>(
+pub fn encode_sjis_zstring<'bump, P: FixupEncodePolicy>(
     bump: &'bump Bump,
     s: &str,
-    fixup: bool,
+    fixup: P,
 ) -> io::Result<bumpalo::collections::Vec<'bump, u8>> {
     let mut output = encode_sjis_string(bump, s, fixup)?;
 
