@@ -77,21 +77,21 @@ impl<'a> Reactor for LocationPainterReactor<'a> {
         self.mark(LocationColor::Offset, |reader| reader.offset());
     }
 
-    fn u8string(&mut self, _fixup: bool, _source: StringSource) {
+    fn u8string(&mut self, _source: StringSource) {
         self.mark(LocationColor::U8String, |reader| reader.u8string());
     }
 
-    fn u16string(&mut self, _fixup: bool, _source: StringSource) {
+    fn u16string(&mut self, _source: StringSource) {
         self.mark(LocationColor::U16String, |reader| reader.u16string());
     }
 
-    fn u8string_array(&mut self, _fixup: bool, _source: StringArraySource) {
+    fn u8string_array(&mut self, _source: StringArraySource) {
         self.mark(LocationColor::U8StringArray, |reader| {
             reader.u8string_array()
         });
     }
 
-    fn u16string_array(&mut self, _fixup: bool, _source: StringArraySource) {
+    fn u16string_array(&mut self, _source: StringArraySource) {
         self.mark(LocationColor::U16StringArray, |reader| {
             reader.u16string_array()
         });

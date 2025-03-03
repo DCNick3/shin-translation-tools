@@ -17,10 +17,10 @@ pub trait Reactor {
     fn reg(&mut self);
     /// A 4-byte jump offset into the snr file
     fn offset(&mut self);
-    fn u8string(&mut self, fixup: bool, source: StringSource);
-    fn u16string(&mut self, fixup: bool, source: StringSource);
-    fn u8string_array(&mut self, fixup: bool, source: StringArraySource);
-    fn u16string_array(&mut self, fixup: bool, source: StringArraySource);
+    fn u8string(&mut self, source: StringSource);
+    fn u16string(&mut self, source: StringSource);
+    fn u8string_array(&mut self, source: StringArraySource);
+    fn u16string_array(&mut self, source: StringArraySource);
 
     fn instr_start(&mut self);
     fn instr_end(&mut self);
@@ -78,6 +78,13 @@ impl StringSource {
             StringSource::Stageinfo => 0,
         }
     }
+
+    pub fn fixup_on_decode(&self) -> bool {
+        match self {
+            StringSource::Msgset(_) | StringSource::Logset => true,
+            _ => false,
+        }
+    }
 }
 
 #[derive(Debug)]
@@ -89,6 +96,12 @@ impl StringArraySource {
     pub fn kind(&self) -> StringArrayKind {
         match self {
             StringArraySource::Select => StringArrayKind::SelectChoices,
+        }
+    }
+
+    pub fn fixup_on_decode(&self) -> bool {
+        match self {
+            StringArraySource::Select => false,
         }
     }
 }

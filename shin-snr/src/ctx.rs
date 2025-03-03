@@ -124,12 +124,11 @@ impl<'r, R: Reactor> Ctx<'r, R> {
     pub fn string(&mut self, source: StringSource) {
         let StringStyle {
             size_kind: length_size,
-            fixup,
         } = self.version.string_style(source.kind());
 
         match length_size {
-            LengthKind::U8Length => self.reactor.u8string(fixup, source),
-            LengthKind::U16Length => self.reactor.u16string(fixup, source),
+            LengthKind::U8Length => self.reactor.u8string(source),
+            LengthKind::U16Length => self.reactor.u16string(source),
         }
     }
 
@@ -137,12 +136,11 @@ impl<'r, R: Reactor> Ctx<'r, R> {
     pub fn string_array(&mut self, source: StringArraySource) {
         let StringStyle {
             size_kind: length_size,
-            fixup,
         } = self.version.string_array_style(source.kind());
 
         match length_size {
-            LengthKind::U8Length => self.reactor.u8string_array(fixup, source),
-            LengthKind::U16Length => self.reactor.u16string_array(fixup, source),
+            LengthKind::U8Length => self.reactor.u8string_array(source),
+            LengthKind::U16Length => self.reactor.u16string_array(source),
         }
     }
 

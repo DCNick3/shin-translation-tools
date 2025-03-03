@@ -67,7 +67,6 @@ pub enum StringArrayKind {
 #[derive(Debug, Copy, Clone)]
 pub struct StringStyle {
     pub size_kind: LengthKind,
-    pub fixup: bool,
 }
 #[derive(Debug, Copy, Clone)]
 pub enum LengthKind {
@@ -113,45 +112,40 @@ impl ShinVersion {
         use ShinVersion::*;
         use StringKind::*;
 
-        let (length_size, fixup) = match self {
+        let size_kind = match self {
             HigurashiSui => match kind {
-                Saveinfo | SelectTitle | Voiceplay => (U8Length, false),
-                Msgset | Logset => (U16Length, true),
+                Saveinfo | SelectTitle | Voiceplay => U8Length,
+                Msgset | Logset => U16Length,
                 Dbgout | Chatset | Named | Stageinfo => {
                     unreachable!()
                 }
             },
             AliasCarnival => match kind {
-                Saveinfo | SelectTitle | Dbgout | Voiceplay | Stageinfo => (U8Length, false),
-                // maybe it's fixed up?
-                Named => (U8Length, false),
-                Msgset | Logset => (U16Length, true),
+                Saveinfo | SelectTitle | Dbgout | Voiceplay | Stageinfo | Named => U8Length,
+                Msgset | Logset => U16Length,
                 Chatset => {
                     // not in this game
                     unreachable!()
                 }
             },
             WhiteEternity => match kind {
-                Saveinfo | SelectTitle | Dbgout | Voiceplay => (U8Length, false),
-                Msgset | Logset => (U16Length, true),
+                Saveinfo | SelectTitle | Dbgout | Voiceplay => U8Length,
+                Msgset | Logset => U16Length,
                 Chatset | Named | Stageinfo => {
                     // not in this game
                     unreachable!()
                 }
             },
             DC4 => match kind {
-                Saveinfo | SelectTitle | Dbgout | Voiceplay => (U16Length, false),
-                Msgset => (U16Length, true),
+                Saveinfo | SelectTitle | Dbgout | Voiceplay | Msgset | Chatset => U16Length,
                 Logset | Named | Stageinfo => {
                     // not in this game
                     unreachable!()
                 }
-                // I _believe_ the SNR does not use any strings using the fixup encoding with this command
-                Chatset => (U16Length, false),
             },
             Konosuba => match kind {
-                Saveinfo | SelectTitle | Dbgout | Voiceplay => (U8Length, false),
-                Msgset => (U16Length, false),
+                Saveinfo | SelectTitle | Dbgout | Voiceplay => U8Length,
+                Msgset => U16Length,
                 Chatset | Logset | Named | Stageinfo => {
                     // not in this game
                     unreachable!()
@@ -159,10 +153,7 @@ impl ShinVersion {
             },
         };
 
-        StringStyle {
-            size_kind: length_size,
-            fixup,
-        }
+        StringStyle { size_kind }
     }
 
     pub fn string_array_style(&self, kind: StringArrayKind) -> StringStyle {
@@ -170,28 +161,25 @@ impl ShinVersion {
         use ShinVersion::*;
         use StringArrayKind::*;
 
-        let (length_size, fixup) = match self {
+        let size_kind = match self {
             HigurashiSui => match kind {
-                SelectChoices => (U8Length, false),
+                SelectChoices => U8Length,
             },
             AliasCarnival => match kind {
-                SelectChoices => (U8Length, false),
+                SelectChoices => U8Length,
             },
             WhiteEternity => match kind {
-                SelectChoices => (U8Length, false),
+                SelectChoices => U8Length,
             },
             DC4 => match kind {
-                SelectChoices => (U16Length, false),
+                SelectChoices => U16Length,
             },
             Konosuba => match kind {
-                SelectChoices => (U8Length, false),
+                SelectChoices => U8Length,
             },
         };
 
-        StringStyle {
-            size_kind: length_size,
-            fixup,
-        }
+        StringStyle { size_kind }
     }
 
     pub fn message_fixup_policy(&self) -> MessageFixupPolicy {

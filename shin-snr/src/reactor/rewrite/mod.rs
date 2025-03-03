@@ -177,7 +177,6 @@ impl<R: StringRewriter> Stringer<R> {
     fn rewrite_string<'s>(
         &'s self,
         position: &mut Position,
-        fixup: bool,
         original: &'s [u8],
         source: StringSource,
     ) -> &'s [u8] {
@@ -187,7 +186,8 @@ impl<R: StringRewriter> Stringer<R> {
             "string is not zero-terminated"
         );
 
-        let original_decoded = decode_sjis_zstring(&self.bump, original, fixup).unwrap();
+        let original_decoded =
+            decode_sjis_zstring(&self.bump, original, source.fixup_on_decode()).unwrap();
         let result = if let Some(replacement) = self.rewriter.rewrite_string(
             &self.bump,
             &original_decoded,
@@ -296,32 +296,28 @@ impl<'a, R: StringRewriter, M: RewriteMode> Reactor for RewriteReactor<'a, R, M>
         self.mode.offset(self.reader.offset())
     }
 
-    fn u8string(&mut self, fixup: bool, source: StringSource) {
+    fn u8string(&mut self, source: StringSource) {
         let s = self.reader.u8string();
 
         // TODO: possible optimization: we don't have to actually encode the string during the map building phase
         // we only care about the size of the string and we have measure_sjis_string for that
 
-        let s = self
-            .stringer
-            .rewrite_string(&mut self.position, fixup, s, source);
+        let s = self.stringer.rewrite_string(&mut self.position, s, source);
 
         self.mode.byte(s.len() as u8);
         self.mode.write(s);
     }
 
-    fn u16string(&mut self, fixup: bool, source: StringSource) {
+    fn u16string(&mut self, source: StringSource) {
         let s = self.reader.u16string();
 
-        let s = self
-            .stringer
-            .rewrite_string(&mut self.position, fixup, s, source);
+        let s = self.stringer.rewrite_string(&mut self.position, s, source);
 
         self.mode.short(s.len() as u16);
         self.mode.write(s);
     }
 
-    fn u8string_array(&mut self, fixup: bool, source: StringArraySource) {
+    fn u8string_array(&mut self, source: StringArraySource) {
         let s = self
             .reader
             .u8string_array()
@@ -335,9 +331,9 @@ impl<'a, R: StringRewriter, M: RewriteMode> Reactor for RewriteReactor<'a, R, M>
 
         let mut res = Vec::new_in(&self.stringer.bump);
         for (i, s) in s.split_inclusive(|&v| v == 0).enumerate() {
-            let s =
-                self.stringer
-                    .rewrite_string(&mut self.position, fixup, s, source_maker(i as u32));
+            let s = self
+                .stringer
+                .rewrite_string(&mut self.position, s, source_maker(i as u32));
             res.extend_from_slice(s);
         }
         res.push(0);
@@ -346,7 +342,7 @@ impl<'a, R: StringRewriter, M: RewriteMode> Reactor for RewriteReactor<'a, R, M>
         self.mode.write(res.as_slice());
     }
 
-    fn u16string_array(&mut self, fixup: bool, source: StringArraySource) {
+    fn u16string_array(&mut self, source: StringArraySource) {
         let s = self
             .reader
             .u16string_array()
@@ -360,9 +356,9 @@ impl<'a, R: StringRewriter, M: RewriteMode> Reactor for RewriteReactor<'a, R, M>
 
         let mut res = Vec::new_in(&self.stringer.bump);
         for (i, s) in s.split_inclusive(|&v| v == 0).enumerate() {
-            let s =
-                self.stringer
-                    .rewrite_string(&mut self.position, fixup, s, source_maker(i as u32));
+            let s = self
+                .stringer
+                .rewrite_string(&mut self.position, s, source_maker(i as u32));
             res.extend_from_slice(s);
         }
         res.push(0);

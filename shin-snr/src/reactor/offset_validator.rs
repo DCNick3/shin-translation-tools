@@ -45,19 +45,19 @@ impl<'a> Reactor for OffsetValidatorReactor<'a> {
         self.referred_offsets.insert(offset);
     }
 
-    fn u8string(&mut self, _fixup: bool, _source: StringSource) {
+    fn u8string(&mut self, _source: StringSource) {
         self.reader.u8string();
     }
 
-    fn u16string(&mut self, _fixup: bool, _source: StringSource) {
+    fn u16string(&mut self, _source: StringSource) {
         self.reader.u16string();
     }
 
-    fn u8string_array(&mut self, _fixup: bool, _source: StringArraySource) {
+    fn u8string_array(&mut self, _source: StringArraySource) {
         self.reader.u8string_array();
     }
 
-    fn u16string_array(&mut self, _fixup: bool, _source: StringArraySource) {
+    fn u16string_array(&mut self, _source: StringArraySource) {
         self.reader.u16string_array();
     }
 

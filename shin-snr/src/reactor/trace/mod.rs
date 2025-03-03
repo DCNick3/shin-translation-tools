@@ -56,28 +56,28 @@ impl<'a, L: StringTraceListener> Reactor for StringTraceReactor<'a, L> {
         self.reader.offset();
     }
 
-    fn u8string(&mut self, fixup: bool, source: StringSource) {
+    fn u8string(&mut self, source: StringSource) {
         let raw = self.reader.u8string();
-        let s = decode_sjis_zstring(&self.bump, raw, fixup).unwrap();
+        let s = decode_sjis_zstring(&self.bump, raw, source.fixup_on_decode()).unwrap();
         self.listener
             .on_string(self.current_instr_offset, source, s)
     }
 
-    fn u16string(&mut self, fixup: bool, source: StringSource) {
+    fn u16string(&mut self, source: StringSource) {
         let s = self.reader.u16string();
-        let s = decode_sjis_zstring(&self.bump, s, fixup).unwrap();
+        let s = decode_sjis_zstring(&self.bump, s, source.fixup_on_decode()).unwrap();
         self.listener
             .on_string(self.current_instr_offset, source, s)
     }
 
-    fn u8string_array(&mut self, fixup: bool, source: StringArraySource) {
+    fn u8string_array(&mut self, source: StringArraySource) {
         let mut s = self.reader.u8string_array();
         while s.last() == Some(&0) {
             s = &s[..s.len() - 1];
         }
         let mut res = Vec::new_in(&self.bump);
         for s in s.split(|&v| v == 0) {
-            let s = decode_sjis_zstring(&self.bump, s, fixup).unwrap();
+            let s = decode_sjis_zstring(&self.bump, s, source.fixup_on_decode()).unwrap();
             res.push(s);
         }
 
@@ -91,14 +91,14 @@ impl<'a, L: StringTraceListener> Reactor for StringTraceReactor<'a, L> {
         }
     }
 
-    fn u16string_array(&mut self, fixup: bool, source: StringArraySource) {
+    fn u16string_array(&mut self, source: StringArraySource) {
         let mut s = self.reader.u16string_array();
         while s.last() == Some(&0) {
             s = &s[..s.len() - 1];
         }
         let mut res = Vec::new_in(&self.bump);
         for s in s.split(|&v| v == 0) {
-            let s = decode_sjis_zstring(&self.bump, s, fixup).unwrap();
+            let s = decode_sjis_zstring(&self.bump, s, source.fixup_on_decode()).unwrap();
             res.push(s);
         }
 

@@ -4,4 +4,4 @@
 *.snr
 *.rom
 
-run_snr_tests.bash
+run_snr_tests.py

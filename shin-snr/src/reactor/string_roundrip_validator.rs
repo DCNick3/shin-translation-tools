@@ -128,30 +128,23 @@ fn validate_fixup_policy(decoded: &str, detection_map: &[FixupDetectResult], pol
 fn roundrip_string(
     bump: &Bump,
     s: &[u8],
-    fixup: bool,
     style: MessageCommandStyle,
     policy: MessageFixupPolicy,
     source: StringSource,
 ) {
-    let decoded = decode_sjis_zstring(bump, s, fixup).unwrap();
+    let decoded = decode_sjis_zstring(bump, s, source.fixup_on_decode()).unwrap();
 
-    let fixup_policy = if fixup {
-        let mut fixup_map = Vec::with_capacity_in(s.len(), bump);
-        detect_fixup(s, &mut fixup_map).unwrap();
-        let fixup_policy = crate::message_parser::infer_string_fixup_policy(
-            bump,
-            &decoded,
-            style,
-            policy,
-            FixupDetectResult::merge_all(&fixup_map),
-            source,
-        );
-        validate_fixup_policy(&decoded, fixup_map.as_slice(), fixup_policy);
-
-        fixup_policy
-    } else {
-        vec![in bump; false; decoded.chars().count()].into_bump_slice()
-    };
+    let mut fixup_map = Vec::with_capacity_in(s.len(), bump);
+    detect_fixup(s, &mut fixup_map).unwrap();
+    let fixup_policy = crate::message_parser::infer_string_fixup_policy(
+        bump,
+        &decoded,
+        style,
+        policy,
+        FixupDetectResult::merge_all(&fixup_map),
+        source,
+    );
+    validate_fixup_policy(&decoded, fixup_map.as_slice(), fixup_policy);
 
     let reencoded = encode_sjis_zstring(bump, &decoded, fixup_policy).unwrap();
 
@@ -163,28 +156,29 @@ fn roundrip_string(
 fn roundrip_string_array(
     bump: &Bump,
     ss: &[u8],
-    fixup: bool,
     _style: MessageCommandStyle,
     _policy: MessageFixupPolicy,
-    _source: StringArraySource,
+    source: StringArraySource,
 ) {
     let mut p = ss;
     while p.last() == Some(&0) {
         p = &p[..p.len() - 1];
     }
 
+    // TODO: infer_string_fixup_policy needs support for sourcing string arrays if we ever encounter string arrays that need fixup
+    assert_eq!(source.fixup_on_decode(), false);
+
     let array_iter = p.split(|&v| v == 0);
     let array_size = array_iter.clone().count();
 
     let mut decoded = Vec::with_capacity_in(array_size, bump);
     for s in array_iter.clone() {
-        let s = decode_sjis_zstring(bump, s, fixup).unwrap();
+        let s = decode_sjis_zstring(bump, s, false).unwrap();
         decoded.push(s);
     }
 
     let mut fixup_policies = Vec::with_capacity_in(array_size, bump);
     for (_s, decoded) in array_iter.clone().zip(&decoded) {
-        assert_eq!(fixup, false); // TODO: infer_string_fixup_policy needs support for sourcing string arrays
         let policy = vec![in bump; false; decoded.chars().count()];
         fixup_policies.push(policy);
     }
@@ -223,24 +217,24 @@ impl<'a> Reactor for StringRoundtripValidatorReactor<'a> {
         self.reader.offset();
     }
 
-    fn u8string(&mut self, fixup: bool, source: StringSource) {
+    fn u8string(&mut self, source: StringSource) {
         let s = self.reader.u8string();
-        roundrip_string(&self.bump, s, fixup, self.style, self.policy, source)
+        roundrip_string(&self.bump, s, self.style, self.policy, source)
     }
 
-    fn u16string(&mut self, fixup: bool, source: StringSource) {
+    fn u16string(&mut self, source: StringSource) {
         let s = self.reader.u16string();
-        roundrip_string(&self.bump, s, fixup, self.style, self.policy, source)
+        roundrip_string(&self.bump, s, self.style, self.policy, source)
     }
 
-    fn u8string_array(&mut self, fixup: bool, source: StringArraySource) {
+    fn u8string_array(&mut self, source: StringArraySource) {
         let ss = self.reader.u8string_array();
-        roundrip_string_array(&self.bump, ss, fixup, self.style, self.policy, source)
+        roundrip_string_array(&self.bump, ss, self.style, self.policy, source)
     }
 
-    fn u16string_array(&mut self, fixup: bool, source: StringArraySource) {
+    fn u16string_array(&mut self, source: StringArraySource) {
         let ss = self.reader.u16string_array();
-        roundrip_string_array(&self.bump, ss, fixup, self.style, self.policy, source)
+        roundrip_string_array(&self.bump, ss, self.style, self.policy, source)
     }
 
     fn instr_start(&mut self) {}
