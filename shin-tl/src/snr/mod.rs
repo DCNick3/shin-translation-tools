@@ -16,7 +16,7 @@ use shin_snr::{
     },
     reader::Reader,
 };
-use shin_versions::ShinVersion;
+use shin_versions::{MessageCommandStyle, ShinVersion};
 use tracing::{error, info};
 
 #[derive(Args, Clone)]
@@ -26,6 +26,25 @@ pub struct CommonArgs {
     engine_version: ShinVersion,
     /// Path to the SNR file
     snr_file: Utf8PathBuf,
+}
+
+/// Determines the policy on transforming message commands style
+#[derive(Default, Debug, Copy, Clone, Eq, PartialEq, clap::ValueEnum)]
+pub enum MessageStylePolicy {
+    /// Keep the message style that is native to the engine. For engines with unescaped commands, they will be left as-is (`c666.`)
+    #[default]
+    Keep,
+    /// Transform the message style to use the modern escaped style (commands like `@c666.`)
+    Modernize,
+}
+
+impl MessageStylePolicy {
+    pub fn apply(&self, native_style: MessageCommandStyle) -> MessageCommandStyle {
+        match self {
+            MessageStylePolicy::Keep => native_style,
+            MessageStylePolicy::Modernize => MessageCommandStyle::Escaped,
+        }
+    }
 }
 
 /// Rewrite shin SNR file with translated strings
@@ -38,19 +57,27 @@ pub struct CommonArgs {
 ///
 /// 3. shin-tl snr rewrite <engine-version> <main.snr> <strings.csv> <main_translated.snr>
 ///
-/// For more usage documentation see https://github.com/DCNick3/shin-translation-tools/blob/master/shin-tl/README.md
+/// For more usage documentation see https://github.com/DCNick3/shin-translation-tools/blob/master/README.md
 #[derive(Subcommand)]
 pub enum Command {
     /// Read strings from an SNR file to a CSV file for translation
     Read {
         #[clap(flatten)]
         common: CommonArgs,
+        /// Change the way message commands are transformed
+        ///
+        /// NOTE: make sure that the same value of this option is used in `shin-tl snr rewrite`
+        #[clap(long, value_enum, default_value_t)]
+        message_style: MessageStylePolicy,
         output: Utf8PathBuf,
     },
     /// Read strings from an SNR file and dump them to the console
     ReadConsole {
         #[clap(flatten)]
         common: CommonArgs,
+        /// Change the way message commands are transformed
+        #[clap(long, value_enum, default_value_t)]
+        message_style: MessageStylePolicy,
     },
     /// Read SNR file, while validating jump offsets in the code
     ReadValidateOffsets {
@@ -68,7 +95,16 @@ pub enum Command {
     Rewrite {
         #[clap(flatten)]
         common: CommonArgs,
+        #[clap(long, value_enum, default_value_t)]
+        /// Change the way message commands are transformed
+        ///
+        /// NOTE: make sure that the same value of this option is used in `shin-tl snr read`
+        message_style: MessageStylePolicy,
+        /// Path to the CSV file with translations
+        ///
+        /// A template can be created with `shin-tl snr read`
         translations: Utf8PathBuf,
+        /// Path to the output SNR file
         output: Utf8PathBuf,
     },
 }
@@ -78,6 +114,7 @@ fn rewrite_snr<R, O>(
     reader: Reader,
     code_offset: u32,
     version: ShinVersion,
+    user_style: MessageCommandStyle,
     rewriter: R,
     mut output: &mut O,
 ) where
@@ -87,6 +124,7 @@ fn rewrite_snr<R, O>(
     let mut reactor = RewriteReactor::new(
         reader,
         version.message_command_style(),
+        user_style,
         version.message_fixup_policy(),
         rewriter,
         code_offset,
@@ -201,15 +239,33 @@ impl Command {
         let reader = Reader::new(&snr_file, code_offset as usize);
 
         match self {
-            Command::Read { common: _, output } => {
+            Command::Read {
+                common: _,
+                message_style: transform_policy,
+                output,
+            } => {
                 let writer = csv::Writer::from_path(output).expect("Opening the CSV file failed");
 
-                let mut reactor = StringTraceReactor::new(reader, CsvTraceListener::new(writer));
+                let snr_style = version.message_command_style();
+                let user_style = transform_policy.apply(snr_style);
+                let mut reactor = StringTraceReactor::new(
+                    reader,
+                    snr_style,
+                    user_style,
+                    CsvTraceListener::new(writer),
+                );
 
                 react_with(&mut reactor, version);
             }
-            Command::ReadConsole { common: _ } => {
-                let mut reactor = StringTraceReactor::new(reader, ConsoleTraceListener);
+            Command::ReadConsole {
+                common: _,
+                message_style: transform_policy,
+            } => {
+                let snr_style = version.message_command_style();
+                let user_style = transform_policy.apply(snr_style);
+
+                let mut reactor =
+                    StringTraceReactor::new(reader, snr_style, user_style, ConsoleTraceListener);
 
                 react_with(&mut reactor, version);
             }
@@ -228,48 +284,67 @@ impl Command {
                 }
             }
             Command::Test { common: _ } => {
-                // 1. test string roundtrip
-                let mut reactor = StringRoundtripValidatorReactor::new(
-                    version.message_command_style(),
-                    version.message_fixup_policy(),
-                    reader.clone(),
-                );
-
-                react_with(&mut reactor, version);
-
-                // 2. test SNR roundtrip
-                let rewriter = NoopRewriter::new();
-
-                let mut output = std::io::Cursor::new(Vec::new());
-                rewrite_snr(
-                    &snr_file,
-                    reader,
-                    code_offset,
-                    version,
-                    rewriter,
-                    &mut output,
-                );
-
-                // and, finally, compare the original and the rewritten SNR files
-                let output = output.into_inner();
-
-                if snr_file.as_slice() != output.as_slice() {
-                    let path = std::env::temp_dir().join("main_rewritten.snr");
-                    std::fs::write(&path, &output).expect("Writing the rewritten SNR file failed");
-
-                    println!(
-                        "Rewritten SNR does not match the original, written to {}",
-                        path.display()
+                // test roundtrips through two command styles
+                // this also tests a case that we currently do not expose to the user: converting an escaped SNR into an unescaped CSV
+                // but it doesn't hurt to test it
+                let snr_style = version.message_command_style();
+                for user_style in [MessageCommandStyle::Unescaped, MessageCommandStyle::Escaped] {
+                    // 1. test string roundtrip
+                    let mut reactor = StringRoundtripValidatorReactor::new(
+                        snr_style,
+                        user_style,
+                        version.message_fixup_policy(),
+                        reader.clone(),
                     );
 
-                    bindiff_snr(version, snr_file.as_slice(), output.as_slice());
+                    react_with(&mut reactor, version);
+
+                    // 2. test SNR roundtrip
+                    // NOTE: we have to pass in out_style to both NoopRewriter and RewriteReactor
+                    // this is a bit ugly, but currently necessary
+                    // because the RewriteReactor only passes the untransformed string to the rewriter
+                    // (it would be wasteful to do otherwise)
+                    // while it expects a transformed string back (because that's what the user supplies in CSV)
+                    // maybe there would be a better way to handle this, but idk...
+                    let rewriter = NoopRewriter::new(snr_style, user_style);
+
+                    let mut output = std::io::Cursor::new(Vec::new());
+                    rewrite_snr(
+                        &snr_file,
+                        reader.clone(),
+                        code_offset,
+                        version,
+                        user_style,
+                        rewriter,
+                        &mut output,
+                    );
+
+                    // and, finally, compare the original and the rewritten SNR files
+                    let output = output.into_inner();
+
+                    if snr_file.as_slice() != output.as_slice() {
+                        let path = std::env::temp_dir().join("main_rewritten.snr");
+                        std::fs::write(&path, &output)
+                            .expect("Writing the rewritten SNR file failed");
+
+                        println!(
+                            "Rewritten SNR does not match the original, written to {}",
+                            path.display()
+                        );
+
+                        bindiff_snr(version, snr_file.as_slice(), output.as_slice());
+                    }
                 }
             }
             Command::Rewrite {
                 common: _,
+                message_style: transform_policy,
                 translations,
                 output,
             } => {
+                let snr_style = version.message_command_style();
+                let user_style = transform_policy.apply(snr_style);
+
                 let translations =
                     csv::Reader::from_path(translations).expect("Opening the CSV file failed");
                 let rewriter = CsvRewriter::new(translations);
@@ -282,6 +357,7 @@ impl Command {
                     reader,
                     code_offset,
                     version,
+                    user_style,
                     rewriter,
                     &mut output,
                 );

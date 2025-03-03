@@ -21,6 +21,9 @@ clap_complete = "4.4.4"
 bumpalo = "3.14.0"
 camino = "1.1.6"
 
+[profile.release]
+debug = true
+
 [workspace.metadata.release]
 # do not publish to crates.io
 publish = false
@@ -32,4 +35,5 @@ tag-prefix = ""
 # The profile that 'cargo dist' will build with
 [profile.dist]
 inherits = "release"
+debug = false
 lto = "thin"

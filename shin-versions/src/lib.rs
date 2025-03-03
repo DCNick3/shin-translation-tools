@@ -31,7 +31,7 @@ pub enum ShinVersion {
 }
 
 /// Describes how `NumberSpec` is encoded in a particular version
-#[derive(Debug, Copy, Clone)]
+#[derive(Debug, Copy, Clone, Eq, PartialEq)]
 pub enum NumberSpecStyle {
     /// `NumberSpec` is stored just as a `u16`. If it's smaller than `0x8000` (I think?) it is a literal, otherwise it is a register reference.
     Short,
@@ -39,7 +39,7 @@ pub enum NumberSpecStyle {
     VarInt,
 }
 
-#[derive(Debug, Copy, Clone)]
+#[derive(Debug, Copy, Clone, Eq, PartialEq)]
 pub enum StringKind {
     Saveinfo,
     // NOTE: this is only for the choice title, not the choices themselves, as they are encoded as an array
@@ -58,29 +58,29 @@ pub enum StringKind {
     Stageinfo,
 }
 
-#[derive(Debug, Copy, Clone)]
+#[derive(Debug, Copy, Clone, Eq, PartialEq)]
 pub enum StringArrayKind {
     SelectChoices,
 }
 
 /// Describes how a particular string kind is encoded
-#[derive(Debug, Copy, Clone)]
+#[derive(Debug, Copy, Clone, Eq, PartialEq)]
 pub struct StringStyle {
     pub size_kind: LengthKind,
 }
-#[derive(Debug, Copy, Clone)]
+#[derive(Debug, Copy, Clone, Eq, PartialEq)]
 pub enum LengthKind {
     U8Length,
     U16Length,
 }
 
-#[derive(Debug, Copy, Clone)]
+#[derive(Debug, Copy, Clone, Eq, PartialEq)]
 pub struct MessageFixupPolicy {
     pub fixup_command_arguments: bool,
     pub fixup_character_names: bool,
 }
 
-#[derive(Debug, Copy, Clone)]
+#[derive(Debug, Copy, Clone, Eq, PartialEq)]
 pub enum MessageCommandStyle {
     Escaped,
     Unescaped,

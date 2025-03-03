@@ -12,16 +12,23 @@ use crate::{
 };
 
 pub struct StringRoundtripValidatorReactor<'a> {
-    style: MessageCommandStyle,
+    snr_style: MessageCommandStyle,
+    user_style: MessageCommandStyle,
     policy: MessageFixupPolicy,
     reader: Reader<'a>,
     bump: Bump,
 }
 
 impl<'a> StringRoundtripValidatorReactor<'a> {
-    pub fn new(style: MessageCommandStyle, policy: MessageFixupPolicy, reader: Reader<'a>) -> Self {
+    pub fn new(
+        snr_style: MessageCommandStyle,
+        user_style: MessageCommandStyle,
+        policy: MessageFixupPolicy,
+        reader: Reader<'a>,
+    ) -> Self {
         Self {
-            style,
+            snr_style,
+            user_style,
             policy,
             reader,
             bump: Bump::new(),
@@ -123,12 +130,17 @@ fn validate_fixup_policy(decoded: &str, detection_map: &[FixupDetectResult], pol
     if !valid {
         format_invalid_policy(decoded, detection_map, policy);
     }
+
+    if policy.len() != decoded.chars().count() {
+        panic!("policy length mismatch");
+    }
 }
 
 fn roundrip_string(
     bump: &Bump,
     s: &[u8],
-    style: MessageCommandStyle,
+    snr_style: MessageCommandStyle,
+    user_style: MessageCommandStyle,
     policy: MessageFixupPolicy,
     source: StringSource,
 ) {
@@ -136,17 +148,26 @@ fn roundrip_string(
 
     let mut fixup_map = Vec::with_capacity_in(s.len(), bump);
     detect_fixup(s, &mut fixup_map).unwrap();
-    let fixup_policy = crate::message_parser::infer_string_fixup_policy(
+
+    // need to do two transforms to simulate what running a full roundtrip would do (from in_style into out_style and back)
+    // first transform into what the user would see
+    let user_transformed =
+        crate::message_parser::transform(bump, decoded, snr_style, user_style, source);
+
+    // and then transform back into what the game would see
+    let (game_transformed, fixup_policy) = crate::message_parser::transform_and_infer_fixup_policy(
         bump,
-        decoded,
-        style,
+        user_transformed,
+        user_style,
+        snr_style,
         policy,
         FixupDetectResult::merge_all(&fixup_map),
         source,
     );
-    validate_fixup_policy(decoded, fixup_map.as_slice(), fixup_policy);
+    validate_fixup_policy(game_transformed, fixup_map.as_slice(), fixup_policy);
+    assert_eq!(decoded, game_transformed);
 
-    let reencoded = encode_sjis_zstring(bump, decoded, fixup_policy).unwrap();
+    let reencoded = encode_sjis_zstring(bump, game_transformed, fixup_policy).unwrap();
 
     if s != reencoded {
         format_mismatch(s, reencoded, decoded);
@@ -219,22 +240,36 @@ impl<'a> Reactor for StringRoundtripValidatorReactor<'a> {
 
     fn u8string(&mut self, source: StringSource) {
         let s = self.reader.u8string();
-        roundrip_string(&self.bump, s, self.style, self.policy, source)
+        roundrip_string(
+            &self.bump,
+            s,
+            self.snr_style,
+            self.user_style,
+            self.policy,
+            source,
+        )
     }
 
     fn u16string(&mut self, source: StringSource) {
         let s = self.reader.u16string();
-        roundrip_string(&self.bump, s, self.style, self.policy, source)
+        roundrip_string(
+            &self.bump,
+            s,
+            self.snr_style,
+            self.user_style,
+            self.policy,
+            source,
+        )
     }
 
     fn u8string_array(&mut self, source: StringArraySource) {
         let ss = self.reader.u8string_array();
-        roundrip_string_array(&self.bump, ss, self.style, self.policy, source)
+        roundrip_string_array(&self.bump, ss, self.snr_style, self.policy, source)
     }
 
     fn u16string_array(&mut self, source: StringArraySource) {
         let ss = self.reader.u16string_array();
-        roundrip_string_array(&self.bump, ss, self.style, self.policy, source)
+        roundrip_string_array(&self.bump, ss, self.snr_style, self.policy, source)
     }
 
     fn instr_start(&mut self) {}

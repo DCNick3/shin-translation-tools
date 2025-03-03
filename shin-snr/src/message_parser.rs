@@ -16,7 +16,6 @@ pub struct CommandToken<'b> {
 
 pub enum MessageToken<'b> {
     Literal(char),
-    EscapedLiteral(char),
     Command(CommandToken<'b>),
 }
 
@@ -167,12 +166,12 @@ impl MessageCommand {
     }
 }
 
-pub trait Sink {
+pub trait StringSink {
     fn push(&mut self, c: char, fixup: bool);
     fn push_str(&mut self, s: &str, fixup: bool);
 }
 
-impl<'b> Sink for String<'b> {
+impl<'b> StringSink for String<'b> {
     fn push(&mut self, c: char, _fixup: bool) {
         self.push(c);
     }
@@ -182,12 +181,12 @@ impl<'b> Sink for String<'b> {
     }
 }
 
-pub struct CountingSink {
+pub struct CountingStringSink {
     pub char_count: usize,
     pub utf8_byte_count: usize,
 }
 
-impl CountingSink {
+impl CountingStringSink {
     pub fn new() -> Self {
         Self {
             char_count: 0,
@@ -196,7 +195,7 @@ impl CountingSink {
     }
 }
 
-impl Sink for CountingSink {
+impl StringSink for CountingStringSink {
     fn push(&mut self, c: char, _fixup: bool) {
         self.char_count += 1;
         self.utf8_byte_count += c.len_utf8();
@@ -208,12 +207,12 @@ impl Sink for CountingSink {
     }
 }
 
-pub struct FullSink<'b> {
+pub struct FullStringSink<'b> {
     pub string: String<'b>,
     pub fixup: Vec<'b, bool>,
 }
 
-impl<'b> FullSink<'b> {
+impl<'b> FullStringSink<'b> {
     pub fn new(bump: &'b Bump, capacity_chars: usize, capacity_bytes: usize) -> Self {
         Self {
             string: String::with_capacity_in(capacity_bytes, bump),
@@ -222,7 +221,7 @@ impl<'b> FullSink<'b> {
     }
 }
 
-impl Sink for FullSink<'_> {
+impl StringSink for FullStringSink<'_> {
     fn push(&mut self, c: char, fixup: bool) {
         self.string.push(c);
         self.fixup.push(fixup);
@@ -241,32 +240,41 @@ pub fn serialize<S>(
     tokens: &[MessageToken],
     sink: &mut S,
 ) where
-    S: Sink,
+    S: StringSink,
 {
     let mut finished_first_line = false;
 
     for token in tokens {
         match *token {
             MessageToken::Literal(lit) => {
-                sink.push(
-                    lit,
-                    if policy.fixup_character_names {
-                        true
-                    } else {
-                        finished_first_line
-                    },
-                );
+                match style {
+                    MessageCommandStyle::Escaped if lit == '@' => {
+                        // a literal `@` needs escaping
+                        sink.push('@', false);
+                        sink.push('@', false);
+                    }
+                    // the actual game checks `lit < 256` here, but
+                    // 1. it operates on Shift-JIS codepoints
+                    // 2. it remaps the single-byte half-width katakana to full-width hiragana
+                    // so the only codepoints that will pass the `< 256` are the unchanged basic ASCII characters
+                    // which, in unicode, corresponds to the range `0x00..=0x7F`
+                    MessageCommandStyle::Unescaped if lit.is_ascii() => {
+                        // an ascii literal needs escaping with `!`
+                        sink.push('!', false);
+                        sink.push(lit, false);
+                    }
+                    _ => {
+                        sink.push(
+                            lit,
+                            if policy.fixup_character_names {
+                                true
+                            } else {
+                                finished_first_line
+                            },
+                        );
+                    }
+                }
             }
-            MessageToken::EscapedLiteral(lit) => match style {
-                MessageCommandStyle::Escaped => {
-                    sink.push('@', false);
-                    sink.push(lit, false);
-                }
-                MessageCommandStyle::Unescaped => {
-                    sink.push('!', false);
-                    sink.push(lit, false);
-                }
-            },
             MessageToken::Command(CommandToken { command, argument }) => {
                 match style {
                     MessageCommandStyle::Escaped => {
@@ -290,17 +298,42 @@ pub fn serialize<S>(
     }
 }
 
-pub fn serialize_full<'b>(
-    bump: &'b Bump,
+pub fn serialize_string<'bump>(
+    bump: &'bump Bump,
     style: MessageCommandStyle,
-    policy: MessageFixupPolicy,
     tokens: &[MessageToken],
-) -> (&'b str, &'b [bool]) {
-    let mut counting_sink = CountingSink::new();
+) -> &'bump str {
+    // when we don't care about the fixup map, the policy doesn't matter
+    // make up some random one
+    let policy = MessageFixupPolicy {
+        fixup_command_arguments: false,
+        fixup_character_names: false,
+    };
+
+    let mut counting_sink = CountingStringSink::new();
 
     serialize(style, policy, tokens, &mut counting_sink);
 
-    let mut full_sink = FullSink::new(
+    let mut string_sink = String::with_capacity_in(counting_sink.utf8_byte_count, bump);
+
+    serialize(style, policy, tokens, &mut string_sink);
+
+    string_sink.into_bump_str()
+}
+
+pub fn serialize_full<'bump>(
+    bump: &'bump Bump,
+    style: MessageCommandStyle,
+    policy: MessageFixupPolicy,
+    tokens: &[MessageToken],
+) -> (&'bump str, &'bump [bool]) {
+    let mut counting_sink = CountingStringSink::new();
+
+    serialize(style, policy, tokens, &mut counting_sink);
+
+    // bump is very bad with interleaving allocations from multiple collections
+    // so make sure to reserve the correct amount of space beforehand
+    let mut full_sink = FullStringSink::new(
         bump,
         counting_sink.char_count,
         counting_sink.utf8_byte_count,
@@ -314,11 +347,21 @@ pub fn serialize_full<'b>(
     )
 }
 
-pub fn parse<'b>(
-    bump: &'b Bump,
+pub trait TokenSink<'bump> {
+    fn push(&mut self, token: MessageToken<'bump>);
+}
+
+impl<'bump> TokenSink<'bump> for Vec<'bump, MessageToken<'bump>> {
+    fn push(&mut self, token: MessageToken<'bump>) {
+        self.push(token);
+    }
+}
+
+pub fn parse<'bump, S: TokenSink<'bump>>(
     style: MessageCommandStyle,
-    message: &'b str,
-) -> Vec<'b, MessageToken<'b>> {
+    message: &'bump str,
+    sink: &mut S,
+) {
     let mut iter = message.chars();
 
     fn read_argument<'b>(iter: &mut Chars<'b>) -> Option<&'b str> {
@@ -334,8 +377,6 @@ pub fn parse<'b>(
         }
     }
 
-    let mut results = Vec::with_capacity_in(message.len(), bump);
-
     while let Some(c) = iter.next() {
         match style {
             MessageCommandStyle::Escaped => {
@@ -343,14 +384,19 @@ pub fn parse<'b>(
                     let Some(c) = iter.next() else {
                         todo!("handle unmatched @");
                     };
-                    let has_argument = MessageCommand::parse(c).is_some_and(|c| c.has_arg());
-                    let argument = has_argument.then(|| read_argument(&mut iter)).flatten();
-                    results.push(MessageToken::Command(CommandToken {
-                        command: c,
-                        argument,
-                    }));
+
+                    if c == '@' {
+                        sink.push(MessageToken::Literal('@'));
+                    } else {
+                        let has_argument = MessageCommand::parse(c).is_some_and(|c| c.has_arg());
+                        let argument = has_argument.then(|| read_argument(&mut iter)).flatten();
+                        sink.push(MessageToken::Command(CommandToken {
+                            command: c,
+                            argument,
+                        }));
+                    }
                 } else {
-                    results.push(MessageToken::Literal(c));
+                    sink.push(MessageToken::Literal(c));
                 }
             }
             MessageCommandStyle::Unescaped => {
@@ -358,37 +404,36 @@ pub fn parse<'b>(
                     if c == '!' {
                         // the game doesn't check end-of-line here too,
                         // so this is almost 100% invalid string that we will never encounter in the wild
+                        // and it's fine to just unwrap
                         let c = iter.next().unwrap();
-                        results.push(MessageToken::EscapedLiteral(c));
+                        sink.push(MessageToken::Literal(c));
                     } else {
                         // NOTE: we handle invalid commands the same way the engine would: by ignoring them
                         // the only difference is that we can recognize more commands than the engine for older version of the engine
                         // (they didn't have the `/`, `t` and `u`)
                         let has_argument = MessageCommand::parse(c).is_some_and(|c| c.has_arg());
                         let argument = has_argument.then(|| read_argument(&mut iter)).flatten();
-                        results.push(MessageToken::Command(CommandToken {
+                        sink.push(MessageToken::Command(CommandToken {
                             command: c,
                             argument,
                         }));
                     }
                 } else {
-                    results.push(MessageToken::Literal(c));
+                    sink.push(MessageToken::Literal(c));
                 }
             }
         }
     }
-
-    results
 }
 
-pub fn infer_string_fixup_policy<'b>(
-    bump: &'b Bump,
+pub fn infer_string_fixup_policy<'bump>(
+    bump: &'bump Bump,
     decoded: &str,
     style: MessageCommandStyle,
     message_policy: MessageFixupPolicy,
     detected: FixupDetectResult,
     source: StringSource,
-) -> &'b [bool] {
+) -> &'bump [bool] {
     // some messages are just not fixed up, even though it makes sense to do so
     // in higurashi sui this happens with messages from the debug menu
     if detected == FixupDetectResult::UnfixedUp {
@@ -397,12 +442,78 @@ pub fn infer_string_fixup_policy<'b>(
 
     match source {
         StringSource::Msgset(_) | StringSource::Logset => {
-            let tokens = parse(bump, style, decoded);
+            let mut tokens = Vec::new_in(bump);
+            parse(style, decoded, &mut tokens);
             let (serialized_string, fixup_policy) =
                 serialize_full(bump, style, message_policy, &tokens);
             assert_eq!(serialized_string, decoded);
             fixup_policy
         }
         _ => vec![in bump; false; decoded.chars().count()].into_bump_slice(),
+    }
+}
+
+pub fn transform_and_infer_fixup_policy<'bump>(
+    bump: &'bump Bump,
+    decoded: &'bump str,
+    in_style: MessageCommandStyle,
+    out_style: MessageCommandStyle,
+    message_policy: MessageFixupPolicy,
+    detected: FixupDetectResult,
+    source: StringSource,
+) -> (&'bump str, &'bump [bool]) {
+    match source {
+        StringSource::Msgset(_) | StringSource::Logset => {
+            let mut tokens = Vec::new_in(bump);
+            parse(in_style, decoded, &mut tokens);
+
+            let (serialized_string, fixup_policy) = if detected == FixupDetectResult::UnfixedUp {
+                // if the original string ignored fixups, hijack the policy to do the same
+                let serialized = serialize_string(bump, out_style, &tokens);
+
+                (
+                    serialized,
+                    vec![in bump; false; serialized.chars().count()].into_bump_slice(),
+                )
+            } else {
+                serialize_full(bump, out_style, message_policy, &tokens)
+            };
+
+            if in_style == out_style {
+                // just a sanity check
+                assert_eq!(serialized_string, decoded);
+            }
+
+            (serialized_string, fixup_policy)
+        }
+        _ => {
+            // do not touch strings outside of messages
+            (
+                decoded,
+                vec![in bump; false; decoded.chars().count()].into_bump_slice(),
+            )
+        }
+    }
+}
+
+pub fn transform<'bump>(
+    bump: &'bump Bump,
+    decoded: &'bump str,
+    in_style: MessageCommandStyle,
+    out_style: MessageCommandStyle,
+    source: StringSource,
+) -> &'bump str {
+    match source {
+        StringSource::Msgset(_) | StringSource::Logset => {
+            let mut tokens = Vec::new_in(bump);
+            parse(in_style, decoded, &mut tokens);
+            let serialized_string = serialize_string(bump, out_style, &tokens);
+            if in_style == out_style {
+                // just a sanity check
+                assert_eq!(serialized_string, decoded);
+            }
+            serialized_string
+        }
+        _ => decoded,
     }
 }

@@ -11,7 +11,7 @@ use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 
 /// A multi-tool for translating shin games
 ///
-/// For usage documentation see https://github.com/DCNick3/shin-translation-tools/blob/master/shin-tl/README.md
+/// For usage documentation see https://github.com/DCNick3/shin-translation-tools/blob/master/README.md
 #[derive(Parser)]
 #[clap(author, version)]
 enum Command {
