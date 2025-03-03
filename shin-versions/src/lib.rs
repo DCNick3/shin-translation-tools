@@ -40,6 +40,16 @@ pub enum NumberSpecStyle {
 }
 
 #[derive(Debug, Copy, Clone, Eq, PartialEq)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[cfg_attr(feature = "serde", serde(untagged))]
+pub enum AnyStringKind {
+    Singular(StringKind),
+    Array(StringArrayKind),
+}
+
+#[derive(Debug, Copy, Clone, Eq, PartialEq)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[cfg_attr(feature = "serde", serde(rename_all = "snake_case"))]
 pub enum StringKind {
     Saveinfo,
     // NOTE: this is only for the choice title, not the choices themselves, as they are encoded as an array
@@ -59,6 +69,8 @@ pub enum StringKind {
 }
 
 #[derive(Debug, Copy, Clone, Eq, PartialEq)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[cfg_attr(feature = "serde", serde(rename_all = "snake_case"))]
 pub enum StringArrayKind {
     SelectChoices,
 }

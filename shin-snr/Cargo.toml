@@ -12,11 +12,11 @@ license.workspace = true
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-shin-versions = { path = "../shin-versions", features = ["clap"] }
+shin-versions = { path = "../shin-versions", features = ["serde"] }
 shin-text = { path = "../shin-text" }
 
 bumpalo = { workspace = true, features = ["collections"] }
-serde = { version = "1.0.193", features = ["derive"] }
+serde = { workspace = true, features = ["derive"] }
 csv = "1.3.0"
 smallvec = { version = "2.0.0-alpha.1", features = ["write"] }
 

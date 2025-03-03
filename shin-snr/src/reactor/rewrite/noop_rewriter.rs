@@ -1,7 +1,7 @@
 use bumpalo::Bump;
 use shin_versions::MessageCommandStyle;
 
-use crate::reactor::{rewrite::StringRewriter, StringSource};
+use crate::reactor::{rewrite::StringRewriter, AnyStringSource};
 
 /// Exercises the string encoder and decoder, but does not actually rewrite strings.
 pub struct NoopRewriter {
@@ -25,7 +25,7 @@ impl StringRewriter for NoopRewriter {
         raw_decoded: &'bump str,
         _instr_index: u32,
         _instr_offset: u32,
-        source: StringSource,
+        source: AnyStringSource,
     ) -> Option<&'bump str> {
         let transformed = crate::message_parser::transform(
             bump,

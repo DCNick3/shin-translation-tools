@@ -15,6 +15,8 @@ const ASCII_END: u8 = 0x80;
 const KATAKANA_START: u8 = 0xa0;
 const KATAKANA_END: u8 = 0xe0;
 
+pub const UNFIXED_UP_CHARACTERS: [char; 64] = KATAKANA_TABLE;
+
 #[inline]
 fn decode_single_sjis_char(c: u8, fixup: bool) -> char {
     if c < 0x20 {
@@ -368,6 +370,49 @@ pub fn encode_sjis_zstring<'bump, P: FixupEncodePolicy>(
     output.push(0);
 
     Ok(output.into_bump_slice())
+}
+
+#[derive(Debug, Clone)]
+pub struct StringArrayIter<'a> {
+    v: &'a [u8],
+}
+
+impl<'a> StringArrayIter<'a> {
+    pub fn new(string_array: &'a [u8]) -> Self {
+        Self { v: string_array }
+    }
+}
+
+impl<'a> Iterator for StringArrayIter<'a> {
+    type Item = &'a [u8];
+
+    fn next(&mut self) -> Option<Self::Item> {
+        if self.v.is_empty() {
+            return None;
+        }
+
+        let idx = self
+            .v
+            .iter()
+            .position(|&x| x == 0)
+            .map(|idx| idx + 1)
+            .expect("Invalid string array: ended without an explicit zero terminator");
+        let (result, rest) = self.v.split_at(idx);
+        self.v = rest;
+
+        debug_assert!(!result.is_empty());
+        debug_assert_eq!(result.last(), Some(&0));
+
+        // empty string is a signal of the end of the array
+        if result == b"\x00" {
+            if !rest.is_empty() {
+                panic!("Invalid string array: zero terminator not at the end of the array");
+            }
+            None
+        } else {
+            Some(result)
+        }
+    }
 }
 
 #[cfg(test)]

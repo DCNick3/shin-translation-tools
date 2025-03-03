@@ -5,12 +5,12 @@ mod x_rewriter;
 use std::{collections::HashMap, io};
 
 use bumpalo::{collections::Vec, Bump};
-use shin_text::{decode_sjis_zstring, encode_sjis_zstring, FixupDetectResult};
+use shin_text::{decode_sjis_zstring, encode_sjis_zstring, FixupDetectResult, StringArrayIter};
 use shin_versions::{MessageCommandStyle, MessageFixupPolicy};
 
 pub use self::{csv_rewriter::CsvRewriter, noop_rewriter::NoopRewriter, x_rewriter::XRewriter};
 use crate::{
-    reactor::{Reactor, StringArraySource, StringSource},
+    reactor::{AnyStringSource, Reactor, StringArraySource, StringSource},
     reader::Reader,
 };
 
@@ -56,7 +56,7 @@ pub trait StringRewriter {
         raw_decoded: &'bump str,
         instr_index: u32,
         instr_offset: u32,
-        source: StringSource,
+        source: AnyStringSource,
     ) -> Option<&'bump str>;
 }
 
@@ -67,7 +67,7 @@ impl StringRewriter for () {
         _decoded: &'bump str,
         _instr_index: u32,
         _instr_offset: u32,
-        _source: StringSource,
+        _source: AnyStringSource,
     ) -> Option<&'bump str> {
         None
     }
@@ -185,7 +185,7 @@ impl<R: StringRewriter> Stringer<R> {
         &'s self,
         position: &mut Position,
         original: &'s [u8],
-        source: StringSource,
+        source: AnyStringSource,
     ) -> &'s [u8] {
         assert_eq!(
             original.last().copied(),
@@ -194,7 +194,7 @@ impl<R: StringRewriter> Stringer<R> {
         );
 
         let original_decoded =
-            decode_sjis_zstring(&self.bump, original, source.fixup_on_decode()).unwrap();
+            decode_sjis_zstring(&self.bump, original, source.contains_commands()).unwrap();
         let result = if let Some(replacement) = self.rewriter.rewrite_string(
             &self.bump,
             original_decoded,
@@ -310,7 +310,9 @@ impl<'a, R: StringRewriter, M: RewriteMode> Reactor for RewriteReactor<'a, R, M>
         // TODO: possible optimization: we don't have to actually encode the string during the map building phase
         // we only care about the size of the string and we have measure_sjis_string for that
 
-        let s = self.stringer.rewrite_string(&mut self.position, s, source);
+        let s =
+            self.stringer
+                .rewrite_string(&mut self.position, s, AnyStringSource::Singular(source));
 
         self.mode.byte(s.len() as u8);
         self.mode.write(s);
@@ -319,29 +321,24 @@ impl<'a, R: StringRewriter, M: RewriteMode> Reactor for RewriteReactor<'a, R, M>
     fn u16string(&mut self, source: StringSource) {
         let s = self.reader.u16string();
 
-        let s = self.stringer.rewrite_string(&mut self.position, s, source);
+        let s =
+            self.stringer
+                .rewrite_string(&mut self.position, s, AnyStringSource::Singular(source));
 
         self.mode.short(s.len() as u16);
         self.mode.write(s);
     }
 
     fn u8string_array(&mut self, source: StringArraySource) {
-        let s = self
-            .reader
-            .u8string_array()
-            // strip only the array zero terminator
-            .strip_suffix(&[0])
-            .expect("string array is not zero-terminated");
-
-        let source_maker = match source {
-            StringArraySource::Select => StringSource::SelectChoice,
-        };
+        let ss = self.reader.u8string_array();
 
         let mut res = Vec::new_in(&self.stringer.bump);
-        for (i, s) in s.split_inclusive(|&v| v == 0).enumerate() {
-            let s = self
-                .stringer
-                .rewrite_string(&mut self.position, s, source_maker(i as u32));
+        for (i, s) in (0..).zip(StringArrayIter::new(ss)) {
+            let s = self.stringer.rewrite_string(
+                &mut self.position,
+                s,
+                AnyStringSource::Array(source, i),
+            );
             res.extend_from_slice(s);
         }
         res.push(0);
@@ -351,22 +348,15 @@ impl<'a, R: StringRewriter, M: RewriteMode> Reactor for RewriteReactor<'a, R, M>
     }
 
     fn u16string_array(&mut self, source: StringArraySource) {
-        let s = self
-            .reader
-            .u16string_array()
-            // strip only the array zero terminator
-            .strip_suffix(&[0])
-            .expect("string array is not zero-terminated");
-
-        let source_maker = match source {
-            StringArraySource::Select => StringSource::SelectChoice,
-        };
+        let ss = self.reader.u16string_array();
 
         let mut res = Vec::new_in(&self.stringer.bump);
-        for (i, s) in s.split_inclusive(|&v| v == 0).enumerate() {
-            let s = self
-                .stringer
-                .rewrite_string(&mut self.position, s, source_maker(i as u32));
+        for (i, s) in (0..).zip(StringArrayIter::new(ss)) {
+            let s = self.stringer.rewrite_string(
+                &mut self.position,
+                s,
+                AnyStringSource::Array(source, i),
+            );
             res.extend_from_slice(s);
         }
         res.push(0);

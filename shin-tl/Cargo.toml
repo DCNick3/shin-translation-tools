@@ -19,15 +19,10 @@ eula = false
 
 [dependencies]
 shin-versions = { path = "../shin-versions", features = ["clap"] }
-shin-text = { path = "../shin-text" }
 shin-snr = { path = "../shin-snr" }
 shin-rom = { path = "../shin-rom" }
 
-once_cell = "1.18.0"
-bumpalo = { workspace = true, features = ["collections"] }
-serde = { version = "1.0.193", features = ["derive"] }
 csv = "1.3.0"
-smallvec = { version = "2.0.0-alpha.1", features = ["write"] }
 camino = { workspace = true }
 
 clap = { workspace = true, features = ["derive"] }

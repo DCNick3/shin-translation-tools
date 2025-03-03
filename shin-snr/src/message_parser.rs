@@ -7,7 +7,7 @@ use bumpalo::{
 use shin_text::FixupDetectResult;
 use shin_versions::{MessageCommandStyle, MessageFixupPolicy};
 
-use crate::reactor::StringSource;
+use crate::reactor::AnyStringSource;
 
 pub struct CommandToken<'b> {
     pub command: char,
@@ -237,6 +237,7 @@ impl StringSink for FullStringSink<'_> {
 pub fn serialize<S>(
     style: MessageCommandStyle,
     policy: MessageFixupPolicy,
+    is_in_messagebox: bool,
     tokens: &[MessageToken],
     sink: &mut S,
 ) where
@@ -266,7 +267,7 @@ pub fn serialize<S>(
                     _ => {
                         sink.push(
                             lit,
-                            if policy.fixup_character_names {
+                            if !is_in_messagebox || policy.fixup_character_names {
                                 true
                             } else {
                                 finished_first_line
@@ -312,11 +313,11 @@ pub fn serialize_string<'bump>(
 
     let mut counting_sink = CountingStringSink::new();
 
-    serialize(style, policy, tokens, &mut counting_sink);
+    serialize(style, policy, false, tokens, &mut counting_sink);
 
     let mut string_sink = String::with_capacity_in(counting_sink.utf8_byte_count, bump);
 
-    serialize(style, policy, tokens, &mut string_sink);
+    serialize(style, policy, false, tokens, &mut string_sink);
 
     string_sink.into_bump_str()
 }
@@ -325,11 +326,12 @@ pub fn serialize_full<'bump>(
     bump: &'bump Bump,
     style: MessageCommandStyle,
     policy: MessageFixupPolicy,
+    is_in_messagebox: bool,
     tokens: &[MessageToken],
 ) -> (&'bump str, &'bump [bool]) {
     let mut counting_sink = CountingStringSink::new();
 
-    serialize(style, policy, tokens, &mut counting_sink);
+    serialize(style, policy, is_in_messagebox, tokens, &mut counting_sink);
 
     // bump is very bad with interleaving allocations from multiple collections
     // so make sure to reserve the correct amount of space beforehand
@@ -339,7 +341,7 @@ pub fn serialize_full<'bump>(
         counting_sink.utf8_byte_count,
     );
 
-    serialize(style, policy, tokens, &mut full_sink);
+    serialize(style, policy, is_in_messagebox, tokens, &mut full_sink);
 
     (
         full_sink.string.into_bump_str(),
@@ -426,13 +428,14 @@ pub fn parse<'bump, S: TokenSink<'bump>>(
     }
 }
 
+#[expect(unused)] // not currently used, but it's nice to have it standalone I guess...
 pub fn infer_string_fixup_policy<'bump>(
     bump: &'bump Bump,
     decoded: &str,
     style: MessageCommandStyle,
     message_policy: MessageFixupPolicy,
     detected: FixupDetectResult,
-    source: StringSource,
+    source: AnyStringSource,
 ) -> &'bump [bool] {
     // some messages are just not fixed up, even though it makes sense to do so
     // in higurashi sui this happens with messages from the debug menu
@@ -440,19 +443,26 @@ pub fn infer_string_fixup_policy<'bump>(
         return vec![in bump; false; decoded.chars().count()].into_bump_slice();
     }
 
-    match source {
-        StringSource::Msgset(_) | StringSource::Logset => {
-            let mut tokens = Vec::new_in(bump);
-            parse(style, decoded, &mut tokens);
-            let (serialized_string, fixup_policy) =
-                serialize_full(bump, style, message_policy, &tokens);
-            assert_eq!(serialized_string, decoded);
-            fixup_policy
-        }
-        _ => vec![in bump; false; decoded.chars().count()].into_bump_slice(),
+    if source.contains_commands() {
+        let mut tokens = Vec::new_in(bump);
+        parse(style, decoded, &mut tokens);
+        let (serialized_string, fixup_policy) = serialize_full(
+            bump,
+            style,
+            message_policy,
+            source.is_for_messagebox(),
+            &tokens,
+        );
+        assert_eq!(serialized_string, decoded);
+        fixup_policy
+    } else {
+        vec![in bump; false; decoded.chars().count()].into_bump_slice()
     }
 }
 
+/// Combines [`transform`] and [`infer_string_fixup_policy`] into a single pass.
+///
+/// This is more efficient that doing those separately, since it only parses the message once.
 pub fn transform_and_infer_fixup_policy<'bump>(
     bump: &'bump Bump,
     decoded: &'bump str,
@@ -460,39 +470,42 @@ pub fn transform_and_infer_fixup_policy<'bump>(
     out_style: MessageCommandStyle,
     message_policy: MessageFixupPolicy,
     detected: FixupDetectResult,
-    source: StringSource,
+    source: AnyStringSource,
 ) -> (&'bump str, &'bump [bool]) {
-    match source {
-        StringSource::Msgset(_) | StringSource::Logset => {
-            let mut tokens = Vec::new_in(bump);
-            parse(in_style, decoded, &mut tokens);
+    if source.contains_commands() {
+        let mut tokens = Vec::new_in(bump);
+        parse(in_style, decoded, &mut tokens);
 
-            let (serialized_string, fixup_policy) = if detected == FixupDetectResult::UnfixedUp {
-                // if the original string ignored fixups, hijack the policy to do the same
-                let serialized = serialize_string(bump, out_style, &tokens);
+        let (serialized_string, fixup_policy) = if detected == FixupDetectResult::UnfixedUp {
+            // if the original string ignored fixups, hijack the policy to do the same
+            let serialized = serialize_string(bump, out_style, &tokens);
 
-                (
-                    serialized,
-                    vec![in bump; false; serialized.chars().count()].into_bump_slice(),
-                )
-            } else {
-                serialize_full(bump, out_style, message_policy, &tokens)
-            };
-
-            if in_style == out_style {
-                // just a sanity check
-                assert_eq!(serialized_string, decoded);
-            }
-
-            (serialized_string, fixup_policy)
-        }
-        _ => {
-            // do not touch strings outside of messages
             (
-                decoded,
-                vec![in bump; false; decoded.chars().count()].into_bump_slice(),
+                serialized,
+                vec![in bump; false; serialized.chars().count()].into_bump_slice(),
             )
+        } else {
+            serialize_full(
+                bump,
+                out_style,
+                message_policy,
+                source.is_for_messagebox(),
+                &tokens,
+            )
+        };
+
+        if in_style == out_style {
+            // just a sanity check
+            assert_eq!(serialized_string, decoded);
         }
+
+        (serialized_string, fixup_policy)
+    } else {
+        // do not touch strings that don't have commands
+        (
+            decoded,
+            vec![in bump; false; decoded.chars().count()].into_bump_slice(),
+        )
     }
 }
 
@@ -501,19 +514,18 @@ pub fn transform<'bump>(
     decoded: &'bump str,
     in_style: MessageCommandStyle,
     out_style: MessageCommandStyle,
-    source: StringSource,
+    source: AnyStringSource,
 ) -> &'bump str {
-    match source {
-        StringSource::Msgset(_) | StringSource::Logset => {
-            let mut tokens = Vec::new_in(bump);
-            parse(in_style, decoded, &mut tokens);
-            let serialized_string = serialize_string(bump, out_style, &tokens);
-            if in_style == out_style {
-                // just a sanity check
-                assert_eq!(serialized_string, decoded);
-            }
-            serialized_string
+    if source.contains_commands() {
+        let mut tokens = Vec::new_in(bump);
+        parse(in_style, decoded, &mut tokens);
+        let serialized_string = serialize_string(bump, out_style, &tokens);
+        if in_style == out_style {
+            // just a sanity check
+            assert_eq!(serialized_string, decoded);
         }
-        _ => decoded,
+        serialized_string
+    } else {
+        decoded
     }
 }

@@ -15,7 +15,11 @@ license.workspace = true
 clap = [
     "dep:clap",
 ]
+serde = [
+    "dep:serde",
+]
 
 [dependencies]
 clap = { workspace = true, optional = true, features = ["derive"] }
+serde = { workspace = true, optional = true, features = ["derive"] }
 arrayref = "0.3.7"

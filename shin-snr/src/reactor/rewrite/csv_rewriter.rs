@@ -2,8 +2,9 @@ use std::{collections::HashMap, io};
 
 use bumpalo::Bump;
 use serde::{de, Deserialize};
+use shin_versions::AnyStringKind;
 
-use crate::reactor::{rewrite::StringRewriter, StringSource};
+use crate::reactor::{rewrite::StringRewriter, AnyStringSource, StringArraySource, StringSource};
 
 #[derive(Deserialize)]
 #[serde(rename_all = "snake_case")]
@@ -44,7 +45,7 @@ struct RawEntry {
     index: u32,
     #[serde(deserialize_with = "deser_hex")]
     offset: u32,
-    source: RawStringSource,
+    source: AnyStringKind,
     source_subindex: u32,
     s: String,
     translated: Option<String>,
@@ -55,16 +56,13 @@ impl RawEntry {
         Entry {
             offset: self.offset,
             source: match self.source {
-                RawStringSource::Saveinfo => StringSource::Saveinfo,
-                RawStringSource::Select => StringSource::Select,
-                RawStringSource::SelectChoice => StringSource::SelectChoice(self.source_subindex),
-                RawStringSource::Msgset => StringSource::Msgset(self.source_subindex),
-                RawStringSource::Dbgout => StringSource::Dbgout,
-                RawStringSource::Logset => StringSource::Logset,
-                RawStringSource::Voiceplay => StringSource::Voiceplay,
-                RawStringSource::Chatset => StringSource::Chatset,
-                RawStringSource::Named => StringSource::Named,
-                RawStringSource::Stageinfo => StringSource::Stageinfo,
+                AnyStringKind::Singular(singular) => AnyStringSource::Singular(
+                    StringSource::from_kind(singular, self.source_subindex),
+                ),
+                AnyStringKind::Array(array) => AnyStringSource::Array(
+                    StringArraySource::from_kind(array),
+                    self.source_subindex,
+                ),
             },
             s: self.s,
             translated: self.translated,
@@ -74,7 +72,7 @@ impl RawEntry {
 
 struct Entry {
     offset: u32,
-    source: StringSource,
+    source: AnyStringSource,
     s: String,
     translated: Option<String>,
 }
@@ -106,7 +104,7 @@ impl StringRewriter for CsvRewriter {
         _decoded: &'bump str,
         instr_index: u32,
         instr_offset: u32,
-        source: StringSource,
+        source: AnyStringSource,
     ) -> Option<&'bump str> {
         let entry = self.entries.get(&instr_index)?;
         assert_eq!(entry.offset, instr_offset);

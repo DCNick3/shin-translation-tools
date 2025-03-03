@@ -18,6 +18,8 @@ license = "MPL-2"
 clap = "4.4.10"
 clap_complete = "4.4.4"
 
+serde = "1.0.218"
+
 bumpalo = "3.14.0"
 camino = "1.1.6"
 

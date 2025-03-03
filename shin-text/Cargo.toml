@@ -13,5 +13,3 @@ license.workspace = true
 
 [dependencies]
 bumpalo = { workspace = true, features = ["collections"] }
-
-once_cell = "1.18.0"

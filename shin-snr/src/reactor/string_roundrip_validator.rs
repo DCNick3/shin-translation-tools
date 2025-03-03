@@ -1,13 +1,15 @@
 use std::iter;
 
-use bumpalo::{collections::Vec, vec, Bump};
+use bumpalo::{collections::Vec, Bump};
 use owo_colors::OwoColorize;
-use shin_text::{decode_sjis_zstring, detect_fixup, encode_sjis_zstring, FixupDetectResult};
+use shin_text::{
+    decode_sjis_zstring, detect_fixup, encode_sjis_zstring, FixupDetectResult, StringArrayIter,
+};
 use shin_versions::{MessageCommandStyle, MessageFixupPolicy};
 use unicode_width::UnicodeWidthChar as _;
 
 use crate::{
-    reactor::{Reactor, StringArraySource, StringSource},
+    reactor::{AnyStringSource, Reactor, StringArraySource, StringSource},
     reader::Reader,
 };
 
@@ -142,9 +144,16 @@ fn roundrip_string(
     snr_style: MessageCommandStyle,
     user_style: MessageCommandStyle,
     policy: MessageFixupPolicy,
-    source: StringSource,
+    source: AnyStringSource,
 ) {
-    let decoded = decode_sjis_zstring(bump, s, source.fixup_on_decode()).unwrap();
+    let decoded = decode_sjis_zstring(bump, s, source.contains_commands()).unwrap();
+
+    if decoded.contains(|v| shin_text::UNFIXED_UP_CHARACTERS.contains(&v)) {
+        panic!(
+            "decoded string contains unfixed-up characters: {:?}",
+            decoded
+        );
+    }
 
     let mut fixup_map = Vec::with_capacity_in(s.len(), bump);
     detect_fixup(s, &mut fixup_map).unwrap();
@@ -177,43 +186,20 @@ fn roundrip_string(
 fn roundrip_string_array(
     bump: &Bump,
     ss: &[u8],
-    _style: MessageCommandStyle,
-    _policy: MessageFixupPolicy,
+    snr_style: MessageCommandStyle,
+    user_style: MessageCommandStyle,
+    policy: MessageFixupPolicy,
     source: StringArraySource,
 ) {
-    let mut p = ss;
-    while p.last() == Some(&0) {
-        p = &p[..p.len() - 1];
-    }
-
-    // TODO: infer_string_fixup_policy needs support for sourcing string arrays if we ever encounter string arrays that need fixup
-    assert_eq!(source.fixup_on_decode(), false);
-
-    let array_iter = p.split(|&v| v == 0);
-    let array_size = array_iter.clone().count();
-
-    let mut decoded = Vec::with_capacity_in(array_size, bump);
-    for s in array_iter.clone() {
-        let s = decode_sjis_zstring(bump, s, false).unwrap();
-        decoded.push(s);
-    }
-
-    let mut fixup_policies = Vec::with_capacity_in(array_size, bump);
-    for (_s, decoded) in array_iter.clone().zip(&decoded) {
-        let policy = vec![in bump; false; decoded.chars().count()];
-        fixup_policies.push(policy);
-    }
-
-    let mut encoded = Vec::with_capacity_in(ss.len(), bump);
-    for (decoded_item, fixup_policy) in decoded.iter().zip(&fixup_policies) {
-        let encoded_item =
-            encode_sjis_zstring(bump, decoded_item, fixup_policy.as_slice()).unwrap();
-        encoded.extend_from_slice(&encoded_item);
-    }
-    encoded.push(0);
-
-    if ss != encoded.as_slice() {
-        format_mismatch(ss, encoded.as_slice(), &format!("{:?}", decoded));
+    for (i, s) in (0..).zip(StringArrayIter::new(ss)) {
+        roundrip_string(
+            bump,
+            s,
+            snr_style,
+            user_style,
+            policy,
+            AnyStringSource::Array(source, i),
+        );
     }
 }
 
@@ -246,7 +232,7 @@ impl<'a> Reactor for StringRoundtripValidatorReactor<'a> {
             self.snr_style,
             self.user_style,
             self.policy,
-            source,
+            AnyStringSource::Singular(source),
         )
     }
 
@@ -258,18 +244,32 @@ impl<'a> Reactor for StringRoundtripValidatorReactor<'a> {
             self.snr_style,
             self.user_style,
             self.policy,
-            source,
+            AnyStringSource::Singular(source),
         )
     }
 
     fn u8string_array(&mut self, source: StringArraySource) {
         let ss = self.reader.u8string_array();
-        roundrip_string_array(&self.bump, ss, self.snr_style, self.policy, source)
+        roundrip_string_array(
+            &self.bump,
+            ss,
+            self.snr_style,
+            self.user_style,
+            self.policy,
+            source,
+        )
     }
 
     fn u16string_array(&mut self, source: StringArraySource) {
         let ss = self.reader.u16string_array();
-        roundrip_string_array(&self.bump, ss, self.snr_style, self.policy, source)
+        roundrip_string_array(
+            &self.bump,
+            ss,
+            self.snr_style,
+            self.user_style,
+            self.policy,
+            source,
+        )
     }
 
     fn instr_start(&mut self) {}
