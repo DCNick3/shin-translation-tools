@@ -69,7 +69,6 @@ impl<'a> Iterator for DirectoryIter<'a> {
                 RomEncoding::ShiftJIS => {
                     shin_text::decode_sjis_zstring(&self.ctx.bump, name, false)
                         .expect("invalid shift-jis in rom filename")
-                        .into_bump_str()
                 }
             };
 

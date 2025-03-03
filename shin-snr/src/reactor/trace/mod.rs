@@ -1,10 +1,7 @@
 mod console;
 mod csv;
 
-use bumpalo::{
-    collections::{String, Vec},
-    Bump,
-};
+use bumpalo::{collections::Vec, Bump};
 use shin_text::decode_sjis_zstring;
 
 pub use self::{console::ConsoleTraceListener, csv::CsvTraceListener};
@@ -14,7 +11,7 @@ use crate::{
 };
 
 pub trait StringTraceListener {
-    fn on_string(&mut self, instr_offset: u32, source: StringSource, s: String);
+    fn on_string(&mut self, instr_offset: u32, source: StringSource, s: &str);
 }
 
 pub struct StringTraceReactor<'a, L> {

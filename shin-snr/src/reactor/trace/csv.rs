@@ -17,7 +17,7 @@ struct Record<'bump> {
     index: u32,
     offset: u32,
     source: StringSource,
-    s: String<'bump>,
+    s: &'bump str,
     translated: Option<String<'bump>>,
 }
 
@@ -59,7 +59,7 @@ impl<'bump> Serialize for Record<'bump> {
         s.serialize_field("offset", &offset)?;
         s.serialize_field("source", &self.source)?;
         s.serialize_field("source_subindex", &self.source.subindex())?;
-        s.serialize_field("s", &self.s.as_str())?;
+        s.serialize_field("s", &self.s)?;
         s.serialize_field("translated", &self.translated.as_ref().map(|s| s.as_str()))?;
         s.end()
     }
@@ -75,7 +75,7 @@ impl<W: io::Write> CsvTraceListener<W> {
 }
 
 impl<W: io::Write> StringTraceListener for CsvTraceListener<W> {
-    fn on_string(&mut self, instr_offset: u32, source: StringSource, s: String) {
+    fn on_string(&mut self, instr_offset: u32, source: StringSource, s: &str) {
         self.writer
             .serialize(Record {
                 index: self.record_idx,

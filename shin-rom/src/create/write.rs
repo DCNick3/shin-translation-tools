@@ -72,7 +72,7 @@ impl<'scratch, 'a, 'bump, W: io::Write> WriteDirectoryInnerVisitor<'scratch, 'a,
     ) {
         self.names.push(encoded_name);
 
-        let name_size = encoded_name.len() as u64 + 1;
+        let name_size = encoded_name.len() as u64;
         let name_offset = self.names_allocator.allocate(name_size);
 
         let offset_multiplier = if is_directory {
@@ -226,7 +226,6 @@ where
             use std::io::Write;
 
             self.writer.write_all(name).expect("Failed to write name");
-            self.writer.write_all(&[0]).expect("Failed to write name");
         }
     }
 }

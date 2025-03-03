@@ -87,7 +87,7 @@ impl<'a, 'bump, S> FsWalker<'bump, S> for AllocateDirectoryVisitor<'a, 'bump> {
                 .0
                 .iter()
                 .tuple_windows()
-                .all(|((_, a, _), (_, b, _))| a < b),
+                .all(|(a, b)| a.encoded_name < b.encoded_name),
             "directory entries must be sorted"
         );
 
@@ -103,8 +103,8 @@ impl<'a, 'bump, S> FsWalker<'bump, S> for AllocateDirectoryVisitor<'a, 'bump> {
         alloc.allocate(2); // "." entry file name
         alloc.allocate(3); // ".." entry file name
 
-        for (_, encoded_name, _) in &directory.0 {
-            alloc.allocate(encoded_name.len() as u64 + 1);
+        for entry in &directory.0 {
+            alloc.allocate(entry.encoded_name.len() as u64);
         }
 
         let my_size = alloc.position - my_offset;

@@ -3,7 +3,7 @@ use std::marker::PhantomData;
 use camino::Utf8PathBuf;
 
 use crate::{
-    create::source::{FileSource, InputDirectory, InputEntry, InputFile},
+    create::source::{FileSource, InputDirectory, InputDirectoryEntry, InputEntry, InputFile},
     progress::RomCounter,
 };
 
@@ -131,11 +131,16 @@ where
         *directory_index_ctr += directory
             .0
             .iter()
-            .filter(|(_, _, e)| matches!(e, InputEntry::Directory(_)))
+            .filter(|entry| matches!(entry.entry, InputEntry::Directory(_)))
             .count();
 
         // enter the subdirectories
-        for (name, encoded_name, entry) in &directory.0 {
+        for InputDirectoryEntry {
+            name,
+            encoded_name,
+            entry,
+        } in &directory.0
+        {
             if let InputEntry::Directory(directory) = entry {
                 path_buf.push(name);
                 recur(
@@ -174,7 +179,12 @@ pub fn visit_directory<'bump, S, V: DirVisitor<'bump, S>>(
     path_buf: &mut Utf8PathBuf,
     visitor: &mut V,
 ) {
-    for (name, encoded_name, entry) in &directory.0 {
+    for InputDirectoryEntry {
+        name,
+        encoded_name,
+        entry,
+    } in &directory.0
+    {
         path_buf.push(name);
         match entry {
             InputEntry::Directory(directory) => {

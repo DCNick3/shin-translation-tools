@@ -138,18 +138,18 @@ fn roundrip_string(
     detect_fixup(s, &mut fixup_map).unwrap();
     let fixup_policy = crate::message_parser::infer_string_fixup_policy(
         bump,
-        &decoded,
+        decoded,
         style,
         policy,
         FixupDetectResult::merge_all(&fixup_map),
         source,
     );
-    validate_fixup_policy(&decoded, fixup_map.as_slice(), fixup_policy);
+    validate_fixup_policy(decoded, fixup_map.as_slice(), fixup_policy);
 
-    let reencoded = encode_sjis_zstring(bump, &decoded, fixup_policy).unwrap();
+    let reencoded = encode_sjis_zstring(bump, decoded, fixup_policy).unwrap();
 
-    if s != reencoded.as_slice() {
-        format_mismatch(s, reencoded.as_slice(), &decoded);
+    if s != reencoded {
+        format_mismatch(s, reencoded, decoded);
     }
 }
 

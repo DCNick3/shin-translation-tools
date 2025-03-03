@@ -206,9 +206,7 @@ impl<R: StringRewriter> Stringer<R> {
                 fixup_detect_result,
                 source,
             );
-            encode_sjis_zstring(&self.bump, replacement, fixup_policy)
-                .unwrap()
-                .into_bump_slice()
+            encode_sjis_zstring(&self.bump, replacement, fixup_policy).unwrap()
         } else {
             original
         };

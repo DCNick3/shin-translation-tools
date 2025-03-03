@@ -72,18 +72,19 @@ fn is_extended(c: u8) -> bool {
     matches!(c, 0x81..=0x9f | 0xe0..=0xfc)
 }
 
-/// The game engine files are encoded in (a variant of) Shift-JIS
-/// But the game engine itself uses UTF-8
-/// This function converts (a variant of) Shift-JIS to UTF-8
-/// This function stops reading either at the first null byte or when byte_size bytes have been read
+/// Decode a Shift-JIS encoded string to UTF-8
+///
+/// Despite the zstring in the name, the function can work with either zero-terminated or non-zero terminated Shift-JIS strings.
+/// It will simply ignore all zero bytes at the end of the string.
+///
+/// If `fixup` is true, an alternative table will be used to decode half-width katakana characters, reading them as full-width hiragana instead.
 pub fn decode_sjis_zstring<'bump>(
     bump: &'bump Bump,
     mut s: &[u8],
     fixup: bool,
-) -> io::Result<bumpalo::collections::String<'bump>> {
-    let mut res = bumpalo::collections::String::new_in(bump);
-    // TODO: maybe there is a better estimation
-    res.reserve(s.len());
+) -> io::Result<&'bump str> {
+    // TODO: maybe there is a better capacity estimation
+    let mut res = bumpalo::collections::String::with_capacity_in(s.len(), bump);
 
     while s.last() == Some(&0) {
         s = &s[..s.len() - 1];
@@ -121,14 +122,18 @@ pub fn decode_sjis_zstring<'bump>(
         res.push(utf8_c);
     }
 
-    Ok(res)
+    Ok(res.into_bump_str())
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum FixupDetectResult {
+    /// No fix-uppable characters were detected, so can't determine if fixup was used
     NoFixupCharacters,
+    /// A fix-uppable character was detected and it was fixed up
     FixedUp,
+    /// A fix-uppable character was detected and it was not fixed up
     UnfixedUp,
+    /// Some fix-uppable characters were fixed up and some were not
     Inconsistent,
 }
 
@@ -180,6 +185,9 @@ impl DetectFixupSink for bumpalo::collections::Vec<'_, FixupDetectResult> {
     }
 }
 
+/// Try to detect, per-character, whether fixup encoding was used.
+///
+/// If `sink` is a bumpalo `Vec`, then produces per-character results. If the sink is `FixupDetectResult`, then it will produce a single judgement on the full string.
 pub fn detect_fixup<S: DetectFixupSink>(mut s: &[u8], sink: &mut S) -> io::Result<()> {
     while s.last() == Some(&0) {
         s = &s[..s.len() - 1];
@@ -242,7 +250,8 @@ fn map_char_to_sjis(c: char) -> Option<u16> {
 }
 
 /// Calculate the size of a string in Shift-JIS
-pub fn measure_sjis_string(s: &str) -> io::Result<usize> {
+// TODO: this is missing fixup support
+pub fn measure_sjis_zstring(s: &str) -> io::Result<usize> {
     let mut result = 0;
 
     for c in s.chars() {
@@ -268,13 +277,8 @@ pub fn measure_sjis_string(s: &str) -> io::Result<usize> {
         }
     }
 
-    Ok(result)
-}
-
-pub fn measure_sjis_zstring(s: &str) -> io::Result<usize> {
-    let mut result = measure_sjis_string(s)?;
-    result += 1;
-    Ok(result)
+    // don't forget the zero terminator
+    Ok(result + 1)
 }
 
 pub trait FixupEncodePolicy {
@@ -311,11 +315,17 @@ where
     }
 }
 
-pub fn encode_sjis_string<'bump, P: FixupEncodePolicy>(
+/// Encode a UTF-8 string into a zero-terminated Shift-JIS string
+///
+/// The `fixup` argument is a policy used to decide per-character whether to use an alternative encoding for hiragana characters or not.
+///
+/// This is necessary because when fixup encoding is in use there is a redundancy: the hiragana characters can either be encoded as double-byte Shift-JIS characters or as single-byte Shift-JIS characters in the range 0xA0-0xDF.
+/// The authoring tools are somewhat sloppy with this and do end up using both encodings in the same string, so to byte-for-byte reproducibility we need to expose this toggle on character level.
+pub fn encode_sjis_zstring<'bump, P: FixupEncodePolicy>(
     bump: &'bump Bump,
     s: &str,
     mut fixup: P,
-) -> io::Result<bumpalo::collections::Vec<'bump, u8>> {
+) -> io::Result<&'bump [u8]> {
     let mut output = bumpalo::collections::Vec::with_capacity_in(s.len(), bump);
 
     for c in s.chars() {
@@ -329,7 +339,8 @@ pub fn encode_sjis_string<'bump, P: FixupEncodePolicy>(
         })?;
 
         // apply fixup
-        // TODO: this might be slow
+        // TODO: linearly looking through 64 entries might be too much..
+        // maybe add a smartass binary search or something like that?
         if fixup.should_fixup() {
             if let Some(position) = SJIS_FIXUP_ENTRIES.iter().position(|&c| c == sjis) {
                 sjis = (KATAKANA_START + position as u8) as u16;
@@ -354,20 +365,9 @@ pub fn encode_sjis_string<'bump, P: FixupEncodePolicy>(
         }
     }
 
-    Ok(output)
-}
-
-/// Encode a string in Shift-JIS
-pub fn encode_sjis_zstring<'bump, P: FixupEncodePolicy>(
-    bump: &'bump Bump,
-    s: &str,
-    fixup: P,
-) -> io::Result<bumpalo::collections::Vec<'bump, u8>> {
-    let mut output = encode_sjis_string(bump, s, fixup)?;
-
     output.push(0);
 
-    Ok(output)
+    Ok(output.into_bump_slice())
 }
 
 #[cfg(test)]
