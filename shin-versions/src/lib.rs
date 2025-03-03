@@ -116,8 +116,7 @@ impl ShinVersion {
         let (length_size, fixup) = match self {
             HigurashiSui => match kind {
                 Saveinfo | SelectTitle | Voiceplay => (U8Length, false),
-                Logset => (U16Length, true),
-                Msgset => (U16Length, true),
+                Msgset | Logset => (U16Length, true),
                 Dbgout | Chatset | Named | Stageinfo => {
                     unreachable!()
                 }
@@ -126,8 +125,7 @@ impl ShinVersion {
                 Saveinfo | SelectTitle | Dbgout | Voiceplay | Stageinfo => (U8Length, false),
                 // maybe it's fixed up?
                 Named => (U8Length, false),
-                Logset => (U16Length, true),
-                Msgset => (U16Length, true),
+                Msgset | Logset => (U16Length, true),
                 Chatset => {
                     // not in this game
                     unreachable!()
@@ -214,9 +212,10 @@ impl ShinVersion {
                 fixup_command_arguments: true,
                 fixup_character_names: false,
             },
-            ShinVersion::Konosuba => {
-                todo!()
-            }
+            ShinVersion::Konosuba => MessageFixupPolicy {
+                fixup_command_arguments: true, // < doesn't matter, no fixuppable command arguments
+                fixup_character_names: false, // < doesn't matter, no fixuppable chars in chara names
+            },
         }
     }
 
