@@ -188,7 +188,7 @@ impl<R: StringRewriter> Stringer<R> {
         );
 
         let original_decoded = decode_sjis_zstring(&self.bump, original, fixup).unwrap();
-        let result = if let Some(s) = self.rewriter.rewrite_string(
+        let result = if let Some(replacement) = self.rewriter.rewrite_string(
             &self.bump,
             &original_decoded,
             position.current_str_index,
@@ -200,13 +200,13 @@ impl<R: StringRewriter> Stringer<R> {
 
             let fixup_policy = crate::message_parser::infer_string_fixup_policy(
                 &self.bump,
-                &original_decoded,
+                replacement,
                 self.style,
                 self.policy,
                 fixup_detect_result,
                 source,
             );
-            encode_sjis_zstring(&self.bump, s, fixup_policy)
+            encode_sjis_zstring(&self.bump, replacement, fixup_policy)
                 .unwrap()
                 .into_bump_slice()
         } else {
