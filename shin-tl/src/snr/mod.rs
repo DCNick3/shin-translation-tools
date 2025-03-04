@@ -10,7 +10,10 @@ use shin_snr::{
     reactor::{
         location_painter::LocationPainterReactor,
         offset_validator::OffsetValidatorReactor,
-        rewrite::{CsvRewriter, NoopRewriter, RewriteReactor, StringRewriter},
+        rewrite::{
+            CsvData, CsvRewriter, NoopRewriter, RewriteReactor, StringReplacementMode,
+            StringRewriter,
+        },
         string_roundrip_validator::StringRoundtripValidatorReactor,
         trace::{ConsoleTraceListener, CsvTraceListener, StringTraceReactor},
     },
@@ -100,6 +103,12 @@ pub enum Command {
         ///
         /// NOTE: make sure that the same value of this option is used in `shin-tl snr read`
         message_style: MessageStylePolicy,
+        /// Don't try to detect issues with the CSV file before rewriting
+        #[clap(long)]
+        no_lint: bool,
+        /// Controls which columns from CSV file are used to replace strings
+        #[clap(long, value_enum, default_value_t)]
+        replacement_mode: StringReplacementMode,
         /// Path to the CSV file with translations
         ///
         /// A template can be created with `shin-tl snr read`
@@ -241,13 +250,13 @@ impl Command {
         match self {
             Command::Read {
                 common: _,
-                message_style: transform_policy,
+                message_style,
                 output,
             } => {
                 let writer = csv::Writer::from_path(output).expect("Opening the CSV file failed");
 
                 let snr_style = version.message_command_style();
-                let user_style = transform_policy.apply(snr_style);
+                let user_style = message_style.apply(snr_style);
                 let mut reactor = StringTraceReactor::new(
                     reader,
                     snr_style,
@@ -259,10 +268,10 @@ impl Command {
             }
             Command::ReadConsole {
                 common: _,
-                message_style: transform_policy,
+                message_style,
             } => {
                 let snr_style = version.message_command_style();
-                let user_style = transform_policy.apply(snr_style);
+                let user_style = message_style.apply(snr_style);
 
                 let mut reactor =
                     StringTraceReactor::new(reader, snr_style, user_style, ConsoleTraceListener);
@@ -338,16 +347,33 @@ impl Command {
             }
             Command::Rewrite {
                 common: _,
-                message_style: transform_policy,
+                message_style,
+                no_lint,
+                replacement_mode,
                 translations,
                 output,
             } => {
                 let snr_style = version.message_command_style();
-                let user_style = transform_policy.apply(snr_style);
+                let user_style = message_style.apply(snr_style);
 
                 let translations =
                     csv::Reader::from_path(translations).expect("Opening the CSV file failed");
-                let rewriter = CsvRewriter::new(translations);
+                let data = CsvData::new(translations);
+                if !no_lint {
+                    if let Err(e) = data.lint(replacement_mode, user_style) {
+                        println!("There are some issues with strings in the provided CSV file");
+
+                        for report in e {
+                            let report = miette::Report::from(report);
+
+                            println!("{:?}", report);
+                        }
+                        println!("NOTE: You can disable linting by passing --no-lint");
+                        std::process::exit(1);
+                    }
+                }
+
+                let rewriter = CsvRewriter::new(data, replacement_mode);
 
                 let output = File::create(output).expect("Opening the output file failed");
                 let mut output = BufWriter::new(output);

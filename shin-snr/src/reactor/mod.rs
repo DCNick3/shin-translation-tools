@@ -86,7 +86,7 @@ impl StringSource {
     pub fn from_kind(kind: StringKind, subindex: u32) -> Self {
         match kind {
             StringKind::Saveinfo => StringSource::Saveinfo,
-            StringKind::SelectTitle => StringSource::Select,
+            StringKind::Select => StringSource::Select,
             StringKind::Msgset => StringSource::Msgset(subindex),
             StringKind::Dbgout => StringSource::Dbgout,
             StringKind::Logset => StringSource::Logset,
@@ -100,7 +100,7 @@ impl StringSource {
     pub fn kind(&self) -> StringKind {
         match *self {
             StringSource::Saveinfo => StringKind::Saveinfo,
-            StringSource::Select => StringKind::SelectTitle,
+            StringSource::Select => StringKind::Select,
             StringSource::Msgset(_) => StringKind::Msgset,
             StringSource::Dbgout => StringKind::Dbgout,
             StringSource::Logset => StringKind::Logset,
@@ -148,13 +148,13 @@ pub enum StringArraySource {
 impl StringArraySource {
     pub fn from_kind(kind: StringArrayKind) -> Self {
         match kind {
-            StringArrayKind::SelectChoices => StringArraySource::Select,
+            StringArrayKind::SelectChoice => StringArraySource::Select,
         }
     }
 
     pub fn kind(&self) -> StringArrayKind {
         match self {
-            StringArraySource::Select => StringArrayKind::SelectChoices,
+            StringArraySource::Select => StringArrayKind::SelectChoice,
         }
     }
 

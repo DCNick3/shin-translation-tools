@@ -53,7 +53,7 @@ pub enum AnyStringKind {
 pub enum StringKind {
     Saveinfo,
     // NOTE: this is only for the choice title, not the choices themselves, as they are encoded as an array
-    SelectTitle,
+    Select,
     Msgset,
     Dbgout,
     Logset,
@@ -72,7 +72,9 @@ pub enum StringKind {
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[cfg_attr(feature = "serde", serde(rename_all = "snake_case"))]
 pub enum StringArrayKind {
-    SelectChoices,
+    // even though it's array, we use a singular noun for the name
+    // this is for compat with already existing CSV files
+    SelectChoice,
 }
 
 /// Describes how a particular string kind is encoded
@@ -126,14 +128,14 @@ impl ShinVersion {
 
         let size_kind = match self {
             HigurashiSui => match kind {
-                Saveinfo | SelectTitle | Voiceplay => U8Length,
+                Saveinfo | Select | Voiceplay => U8Length,
                 Msgset | Logset => U16Length,
                 Dbgout | Chatset | Named | Stageinfo => {
                     unreachable!()
                 }
             },
             AliasCarnival => match kind {
-                Saveinfo | SelectTitle | Dbgout | Voiceplay | Stageinfo | Named => U8Length,
+                Saveinfo | Select | Dbgout | Voiceplay | Stageinfo | Named => U8Length,
                 Msgset | Logset => U16Length,
                 Chatset => {
                     // not in this game
@@ -141,7 +143,7 @@ impl ShinVersion {
                 }
             },
             WhiteEternity => match kind {
-                Saveinfo | SelectTitle | Dbgout | Voiceplay => U8Length,
+                Saveinfo | Select | Dbgout | Voiceplay => U8Length,
                 Msgset | Logset => U16Length,
                 Chatset | Named | Stageinfo => {
                     // not in this game
@@ -149,14 +151,14 @@ impl ShinVersion {
                 }
             },
             DC4 => match kind {
-                Saveinfo | SelectTitle | Dbgout | Voiceplay | Msgset | Chatset => U16Length,
+                Saveinfo | Select | Dbgout | Voiceplay | Msgset | Chatset => U16Length,
                 Logset | Named | Stageinfo => {
                     // not in this game
                     unreachable!()
                 }
             },
             Konosuba => match kind {
-                Saveinfo | SelectTitle | Dbgout | Voiceplay => U8Length,
+                Saveinfo | Select | Dbgout | Voiceplay => U8Length,
                 Msgset => U16Length,
                 Chatset | Logset | Named | Stageinfo => {
                     // not in this game
@@ -175,19 +177,19 @@ impl ShinVersion {
 
         let size_kind = match self {
             HigurashiSui => match kind {
-                SelectChoices => U8Length,
+                SelectChoice => U8Length,
             },
             AliasCarnival => match kind {
-                SelectChoices => U8Length,
+                SelectChoice => U8Length,
             },
             WhiteEternity => match kind {
-                SelectChoices => U8Length,
+                SelectChoice => U8Length,
             },
             DC4 => match kind {
-                SelectChoices => U16Length,
+                SelectChoice => U16Length,
             },
             Konosuba => match kind {
-                SelectChoices => U8Length,
+                SelectChoice => U8Length,
             },
         };
 
@@ -329,5 +331,23 @@ impl RomVersion {
             Rom1V2_1 => FromStart,
             Rom2V1_0 | Rom2V1_1 => FromIndexStart,
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    #[cfg(feature = "serde")]
+    #[test]
+    fn serde_any_string_kind() {
+        use crate::{AnyStringKind, StringArrayKind, StringKind};
+
+        assert_eq!(
+            serde_json::from_str::<AnyStringKind>("\"saveinfo\"").unwrap(),
+            AnyStringKind::Singular(StringKind::Saveinfo)
+        );
+        assert_eq!(
+            serde_json::from_str::<AnyStringKind>("\"select_choice\"").unwrap(),
+            AnyStringKind::Array(StringArrayKind::SelectChoice)
+        );
     }
 }

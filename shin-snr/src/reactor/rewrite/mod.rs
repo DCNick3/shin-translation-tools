@@ -8,7 +8,11 @@ use bumpalo::{collections::Vec, Bump};
 use shin_text::{decode_sjis_zstring, encode_sjis_zstring, FixupDetectResult, StringArrayIter};
 use shin_versions::{MessageCommandStyle, MessageFixupPolicy};
 
-pub use self::{csv_rewriter::CsvRewriter, noop_rewriter::NoopRewriter, x_rewriter::XRewriter};
+pub use self::{
+    csv_rewriter::{CsvData, CsvRewriter, StringReplacementMode},
+    noop_rewriter::NoopRewriter,
+    x_rewriter::XRewriter,
+};
 use crate::{
     reactor::{AnyStringSource, Reactor, StringArraySource, StringSource},
     reader::Reader,

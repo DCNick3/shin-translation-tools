@@ -1,10 +1,13 @@
-use std::{collections::HashMap, io};
+use std::io;
 
 use bumpalo::Bump;
 use serde::{de, Deserialize};
-use shin_versions::AnyStringKind;
+use shin_versions::{AnyStringKind, MessageCommandStyle};
 
-use crate::reactor::{rewrite::StringRewriter, AnyStringSource, StringArraySource, StringSource};
+use crate::{
+    message_parser::lint::diagnostics::LineReport,
+    reactor::{rewrite::StringRewriter, AnyStringSource, StringArraySource, StringSource},
+};
 
 #[derive(Deserialize)]
 #[serde(rename_all = "snake_case")]
@@ -70,6 +73,17 @@ impl RawEntry {
     }
 }
 
+#[derive(Default, Debug, Clone, Copy)]
+#[cfg_attr(feature = "clap", derive(clap::ValueEnum))]
+pub enum StringReplacementMode {
+    /// Replace strings with the value from `translated` column, leaving those that don't have a translation as-is. The `s` column will be ignored.
+    #[default]
+    TranslatedOnly,
+    /// Replace strings with the value from `translated` column, falling back to `s` column if `translated` is not present. This is the old default behavior.   
+    TranslatedOrOriginal,
+}
+
+#[derive(Clone)]
 struct Entry {
     offset: u32,
     source: AnyStringSource,
@@ -77,22 +91,91 @@ struct Entry {
     translated: Option<String>,
 }
 
-fn read_csv<R: io::Read>(reader: csv::Reader<R>) -> HashMap<u32, Entry> {
-    reader
+impl Entry {
+    pub fn get_effective_string(&self, mode: StringReplacementMode) -> Option<&str> {
+        match (&self.translated, mode) {
+            (Some(translated), _) => Some(translated),
+            (None, StringReplacementMode::TranslatedOnly) => None,
+            (None, StringReplacementMode::TranslatedOrOriginal) => Some(&self.s),
+        }
+    }
+}
+
+fn read_csv<R: io::Read>(reader: csv::Reader<R>) -> Vec<Option<Entry>> {
+    let mut result = vec![None; 64];
+
+    for (index, entry) in reader
         .into_deserialize()
         .map(|r| r.unwrap())
         .map(|v: RawEntry| (v.index, v.into_entry()))
-        .collect()
+    {
+        if result.len() <= index as usize {
+            result.resize_with(result.len() * 2, || None);
+        }
+
+        result[index as usize] = Some(entry);
+    }
+
+    result
 }
 
-pub struct CsvRewriter {
-    entries: HashMap<u32, Entry>,
+pub struct CsvData {
+    entries: Vec<Option<Entry>>,
 }
 
-impl CsvRewriter {
+impl CsvData {
     pub fn new<R: io::Read>(reader: csv::Reader<R>) -> Self {
         Self {
             entries: read_csv(reader),
+        }
+    }
+
+    pub fn lint(
+        &self,
+        mode: StringReplacementMode,
+        style: MessageCommandStyle,
+    ) -> Result<(), Vec<LineReport>> {
+        let mut reports = Vec::new();
+
+        let mut bump = Bump::new();
+        for (index, line) in (0..).zip(&self.entries) {
+            let Some(line) = line else {
+                continue;
+            };
+            let Some(s) = line.get_effective_string(mode) else {
+                continue;
+            };
+
+            if let Err(report) =
+                crate::message_parser::lint::lint_string(&bump, s, style, line.source, index)
+            {
+                reports.push(report);
+                if reports.len() >= 64 {
+                    // too many errors, stop
+                    break;
+                }
+            }
+            bump.reset();
+        }
+
+        if reports.is_empty() {
+            Ok(())
+        } else {
+            Err(reports)
+        }
+    }
+}
+
+pub struct CsvRewriter {
+    entries: Vec<Option<Entry>>,
+    mode: StringReplacementMode,
+}
+
+impl CsvRewriter {
+    pub fn new(data: CsvData, mode: StringReplacementMode) -> Self {
+        Self {
+            entries: data.entries,
+            mode,
         }
     }
 }
@@ -106,12 +189,11 @@ impl StringRewriter for CsvRewriter {
         instr_offset: u32,
         source: AnyStringSource,
     ) -> Option<&'bump str> {
-        let entry = self.entries.get(&instr_index)?;
+        // no entry -> no replacement
+        let entry = self.entries[instr_index as usize].as_ref()?;
         assert_eq!(entry.offset, instr_offset);
         assert_eq!(entry.source, source);
 
-        let rewrite = entry.translated.as_deref().unwrap_or(entry.s.as_str());
-
-        Some(rewrite)
+        entry.get_effective_string(self.mode)
     }
 }

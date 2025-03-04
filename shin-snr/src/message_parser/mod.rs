@@ -1,4 +1,6 @@
-use std::str::Chars;
+pub mod lint;
+
+use std::str::CharIndices;
 
 use bumpalo::{
     collections::{String, Vec},
@@ -17,6 +19,12 @@ pub struct CommandToken<'b> {
 pub enum MessageToken<'b> {
     Literal(char),
     Command(CommandToken<'b>),
+}
+
+pub struct SpannedMessageToken<'b> {
+    pub start: usize,
+    pub end: usize,
+    pub token: MessageToken<'b>,
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -350,12 +358,18 @@ pub fn serialize_full<'bump>(
 }
 
 pub trait TokenSink<'bump> {
-    fn push(&mut self, token: MessageToken<'bump>);
+    fn push(&mut self, start: usize, end: usize, token: MessageToken<'bump>);
 }
 
 impl<'bump> TokenSink<'bump> for Vec<'bump, MessageToken<'bump>> {
-    fn push(&mut self, token: MessageToken<'bump>) {
+    fn push(&mut self, _start: usize, _end: usize, token: MessageToken<'bump>) {
         self.push(token);
+    }
+}
+
+impl<'bump> TokenSink<'bump> for Vec<'bump, SpannedMessageToken<'bump>> {
+    fn push(&mut self, start: usize, end: usize, token: MessageToken<'bump>) {
+        self.push(SpannedMessageToken { start, end, token });
     }
 }
 
@@ -364,41 +378,68 @@ pub fn parse<'bump, S: TokenSink<'bump>>(
     message: &'bump str,
     sink: &mut S,
 ) {
-    let mut iter = message.chars();
+    struct Parse<'b> {
+        iter: CharIndices<'b>,
+        can_have_dot: bool,
+    }
 
-    fn read_argument<'b>(iter: &mut Chars<'b>) -> Option<&'b str> {
-        let s = iter.as_str();
-        match s.find('.') {
-            None => None,
-            Some(pos) => {
-                let arg = &s[..pos];
-                let tail = &s[pos + 1..];
-                *iter = tail.chars();
-                Some(arg)
+    impl<'b> Parse<'b> {
+        fn read_argument(&mut self) -> Option<&'b str> {
+            if self.can_have_dot {
+                let mut iter = self.iter.clone();
+                let start = iter.offset();
+                while let Some((ofs, c)) = iter.next() {
+                    if c == '.' {
+                        let arg = &self.iter.as_str()[..ofs - start];
+                        self.iter = iter;
+                        return Some(arg);
+                    }
+                }
+                self.can_have_dot = false;
+                None
+            } else {
+                None
             }
+        }
+
+        fn next(&mut self) -> Option<(usize, char)> {
+            self.iter.next()
+        }
+
+        fn position(&self) -> usize {
+            self.iter.offset()
         }
     }
 
-    while let Some(c) = iter.next() {
+    let mut parse = Parse {
+        iter: message.char_indices(),
+        can_have_dot: true,
+    };
+
+    while let Some((start, c)) = parse.next() {
         match style {
             MessageCommandStyle::Escaped => {
                 if c == '@' {
-                    let Some(c) = iter.next() else {
+                    let Some((_, c)) = parse.next() else {
                         todo!("handle unmatched @");
                     };
 
                     if c == '@' {
-                        sink.push(MessageToken::Literal('@'));
+                        sink.push(start, parse.position(), MessageToken::Literal('@'));
                     } else {
                         let has_argument = MessageCommand::parse(c).is_some_and(|c| c.has_arg());
-                        let argument = has_argument.then(|| read_argument(&mut iter)).flatten();
-                        sink.push(MessageToken::Command(CommandToken {
-                            command: c,
-                            argument,
-                        }));
+                        let argument = has_argument.then(|| parse.read_argument()).flatten();
+                        sink.push(
+                            start,
+                            parse.position(),
+                            MessageToken::Command(CommandToken {
+                                command: c,
+                                argument,
+                            }),
+                        );
                     }
                 } else {
-                    sink.push(MessageToken::Literal(c));
+                    sink.push(start, parse.position(), MessageToken::Literal(c));
                 }
             }
             MessageCommandStyle::Unescaped => {
@@ -407,21 +448,26 @@ pub fn parse<'bump, S: TokenSink<'bump>>(
                         // the game doesn't check end-of-line here too,
                         // so this is almost 100% invalid string that we will never encounter in the wild
                         // and it's fine to just unwrap
-                        let c = iter.next().unwrap();
-                        sink.push(MessageToken::Literal(c));
+                        // maybe it's actually not ideal since our end users can supply such strings...
+                        let (_, c) = parse.next().unwrap();
+                        sink.push(start, parse.position(), MessageToken::Literal(c));
                     } else {
                         // NOTE: we handle invalid commands the same way the engine would: by ignoring them
                         // the only difference is that we can recognize more commands than the engine for older version of the engine
                         // (they didn't have the `/`, `t` and `u`)
                         let has_argument = MessageCommand::parse(c).is_some_and(|c| c.has_arg());
-                        let argument = has_argument.then(|| read_argument(&mut iter)).flatten();
-                        sink.push(MessageToken::Command(CommandToken {
-                            command: c,
-                            argument,
-                        }));
+                        let argument = has_argument.then(|| parse.read_argument()).flatten();
+                        sink.push(
+                            start,
+                            parse.position(),
+                            MessageToken::Command(CommandToken {
+                                command: c,
+                                argument,
+                            }),
+                        );
                     }
                 } else {
-                    sink.push(MessageToken::Literal(c));
+                    sink.push(start, parse.position(), MessageToken::Literal(c));
                 }
             }
         }
