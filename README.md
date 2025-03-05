@@ -69,11 +69,11 @@ find out which games are supported.
 Af of writing this readme, vita versions of "AstralAir no Shiroki Towa -White Eternity-", "ALIA's CARNIVAL!
 Sacrament" and "Higurashi no Naku Koro ni Sui" along with switch version of "D.C.4 -Da Capo 4-" are supported.
 
-A note on ALIA's CARNICAL and Higurashi no Naku Koro ni Sui support: due to the way that engine version is coded, most
-half-width (normal) english characters will be interpreted as commands. You'll need to
-use [fill-width](https://en.wikipedia.org/wiki/Halfwidth_and_fullwidth_forms) latin characters to avoid that.
+Note that for games that have `commands style` set to `unescaped` (like ALIA's CARNIVAL! and Higurashi Sui) you will
+probably want to convert the command styles as outlined
+in [this section](#dealing-with-ascii-characters-in-older-games).
 
-If you want to translate some of the games this engine uses, let me know, so I can prioritize support for that game.
+If you want to translate some other games this engine uses, let me know, so I can prioritize support for that game.
 
 ## Usage
 
@@ -83,6 +83,8 @@ First of all, you would need the game files. How you obtain it differs by the pl
 
 On Switch, you would need to first dump the game with [nxdumptool](https://github.com/DarkMatterCore/nxdumptool) and
 then extract the romfs files with [hactoolnet](https://github.com/Thealexbarney/LibHac).
+
+When dealing with PS Vita files, make sure that you have the files decrypted.
 
 shin engine usually packages its files into one or two `.rom` files: `data.rom` and sometimes `patch.rom`. You would
 need to obtain them first.
@@ -123,7 +125,7 @@ version it is. Thus, you need to supply the engine version to the tool.
 
 See "shin-tl name" column
 of [this spreadsheet](https://docs.google.com/spreadsheets/d/1wGX9FOQq_iXcWMnY9qITCAV7hq1R7_gpWwjkT4_tKDI/edit#gid=0)
-corresponding ti your game to find out what to put here.
+corresponding to your game to find out what to put here.
 
 The `strings.csv` file will contain the extracted strings. It can be edited with a spreadsheet editor like Excel or
 LibreOffice Calc.
