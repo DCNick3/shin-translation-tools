@@ -651,7 +651,7 @@ dependencies = [
 
 [[package]]
 name = "shin-rom"
-version = "0.8.0"
+version = "0.9.0"
 dependencies = [
  "arrayref",
  "binrw",
@@ -670,7 +670,7 @@ dependencies = [
 
 [[package]]
 name = "shin-snr"
-version = "0.8.0"
+version = "0.9.0"
 dependencies = [
  "bumpalo",
  "clap",
@@ -688,14 +688,14 @@ dependencies = [
 
 [[package]]
 name = "shin-text"
-version = "0.8.0"
+version = "0.9.0"
 dependencies = [
  "bumpalo",
 ]
 
 [[package]]
 name = "shin-tl"
-version = "0.8.0"
+version = "0.9.0"
 dependencies = [
  "camino",
  "clap",
@@ -712,7 +712,7 @@ dependencies = [
 
 [[package]]
 name = "shin-versions"
-version = "0.8.0"
+version = "0.9.0"
 dependencies = [
  "arrayref",
  "clap",

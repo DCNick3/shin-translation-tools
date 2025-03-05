@@ -1,6 +1,6 @@
 [package]
 name = "shin-text"
-version = "0.8.0"
+version = "0.9.0"
 edition = "2021"
 description = "A library implementing the variant of Shift-JIS used by the shin engine"
 
