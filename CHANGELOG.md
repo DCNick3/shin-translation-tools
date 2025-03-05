@@ -1,3 +1,26 @@
+# Version 0.9.0
+
+This version includes features that make it easier to translate older versions of the engines using unescaped commands,
+like for Higurashi no Naku Koro ni Sui (`PCSG00517`) and ALIA's CARNIVAL (`PCSG00628`)
+
+## Breaking changes
+
+- Add an optional linter that checks for invalid commands in messages. If you wish to disable the linting and generate
+  the file despite that, pass the `--no-lint` flag.
+- Rewriter will now ignore the value in the untraslated `s` column, only reading the contents of the `translated`
+  column. If there's no value there, the string will be left as it is in the SNR file.
+  The old behaviour of checking the `translated` column and falling back to the `s` column can be enabled by passing
+  `--replacement-mode translated-or-original` flag.
+
+## Features
+
+- Change the way fixups encoding is implemented; Make the usage of fixup encoding contextual by parsing the layout
+  commands. This allows the rewriting to produce SNR files that are byte-for-byte equal for all supported engine
+  versions, making me much more confident in the validity of the tool.
+- Adds support for transforming layout command format between old unescaped format and the new escaped one.
+  This makes translations to languages that use ASCII characters much easier.
+  See [this README section](README.md#dealing-with-ascii-characters-in-older-games) for usage documentation
+
 # Version 0.8.0
 
 - Adds support for Higurashi no Naku Koro ni Sui ps vita scenarios (`PCSG00517`, released on 2015-01-28)

@@ -67,7 +67,7 @@ in [this spreadsheet](https://docs.google.com/spreadsheets/d/1wGX9FOQq_iXcWMnY9q
 find out which games are supported.
 
 Af of writing this readme, vita versions of "AstralAir no Shiroki Towa -White Eternity-", "ALIA's CARNIVAL!
-Sacrament" amd "Higurashi no Naku Koro ni Sui" along with switch version of "D.C.4 -Da Capo 4-" are supported.
+Sacrament" and "Higurashi no Naku Koro ni Sui" along with switch version of "D.C.4 -Da Capo 4-" are supported.
 
 A note on ALIA's CARNICAL and Higurashi no Naku Koro ni Sui support: due to the way that engine version is coded, most
 half-width (normal) english characters will be interpreted as commands. You'll need to
@@ -193,9 +193,39 @@ On Switch you would use LayeredFS mods to do that.
 
 ## Message format
 
-See https://docs.google.com/spreadsheets/d/1HNYDUVUSKz9JTHieH7t8zYIt06KFTeOxExSCO6ZjatU/edit#gid=1796226786
+Some strings can contain layout commands. These are strings for `MSGSET`, `LOGSET` and `SELECT` commands (they
+correspond to `msgset`, `logset` and `select_choice` values of `source` column in the CSV). They are interleaved with
+regular text and can change the way the text looks or perform some actions when reached.
 
-TODO: write a more detailed intro. Also, ALIA's CARNIVAL and Higurashi Sui has commands without the `@` prefix.
+All commands are represented by a single lowercase ASCII character. Some of them have a single argument that starts
+immediately after the command character and is terminated by `.`. Argument can be a string (then it's treated literally)
+or a number (then it is parsed either as a decimal number or, if prefixed by `$`, as a hexadecimal).
+
+I am aware of two styles of the commands used in different versions of the engine:
+
+- Escaped. The more modern one, prefixes all commands with `@`. Example: `語り手@r@vhello.Hello.`
+- Unescaped. Can be found in order versions, all ASCII characters are implicitly treated as commands. `!` can be used to
+  escape those. Example: `語り手rvhello.!H!e!l!l!o.`
+
+One version only ever uses a single style. You can see which is which in
+the [game spreadsheet](https://docs.google.com/spreadsheets/d/1wGX9FOQq_iXcWMnY9qITCAV7hq1R7_gpWwjkT4_tKDI).
+
+For documentation on which commands does what, you can
+check [this spreadsheet](https://docs.google.com/spreadsheets/d/1HNYDUVUSKz9JTHieH7t8zYIt06KFTeOxExSCO6ZjatU/edit#gid=1796226786).
+
+### Dealing with ASCII characters in older games
+
+As you might have noticed, making translation with unescaped command style to any language that uses ASCII characters
+`!c!a!n! !b!e! !c!u!b!m!e!r!s!o!m!e`. This is why `shin-tl` can seamlessly convert the scenario to the escaped format
+and back.
+
+To use this, pass `--message-style modernize` parameter to __both__ the `snr read` and `snr rewrite`. The `read` will
+now generate a CSV file in the escaped format (prefixing all commands with `@`), while `rewrite` will convert it back to
+equivalent unescaped form, using `!` to escape all literal ASCII characters.
+
+Note that if you don't pass `--message-style modernize` to `snr rewrire`, the tool will generate an SNR file with
+escaped commands that the engine won't be able to parse correctly. Hopefully, the enabled-by-default linting should help
+you detect this.
 
 ## Alternatives
 
@@ -213,3 +243,8 @@ There are alternatives to this project, which support other versions of the engi
 ## License
 
 Licensed under Mozilla Public License 2.0. See [LICENSE](LICENSE) for more information.
+
+## Disclaimer
+
+This is a fan project to enable unofficial translations of shin-based games. It is by no means affiliated with
+Entergram, Dramatic Create, Alchemist or any other rightsholder.
