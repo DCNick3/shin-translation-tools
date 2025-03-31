@@ -157,8 +157,8 @@ importing the csv:
 
 2. Inject the translated strings back
 
-Create a translation csv by either putting your translation into the `translated` column, or modifying the `s` column
-directly. The `translated` column will take precedence over the `s` column.
+Create a translation csv by putting your translated strings into the `translated` column. Don't change the strings in
+`s` column, those changes will be ignored.
 
 To inject the translated strings back into the snr file, use a command like this:
 
