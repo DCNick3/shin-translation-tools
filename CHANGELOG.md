@@ -1,4 +1,4 @@
-# Unreleased
+# Version 0.10.0
 
 This version adds support for text reflowing, allowing to bake-in linebreaks that are more natural for western
 languages. See [this README section](README.md#text-reflowing-with-shin-translation-tools) for usage documentation
