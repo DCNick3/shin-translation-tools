@@ -54,7 +54,7 @@ fn on_string_impl<'bump, L: StringTraceListener>(
     let snr_string = decode_sjis_zstring(bump, s, source.contains_commands()).unwrap();
 
     let user_string =
-        crate::message_parser::transform(bump, snr_string, snr_style, user_style, source);
+        crate::layout::message_parser::transform(bump, snr_string, snr_style, user_style, source);
 
     listener.on_string(instr_offset, source, user_string)
 }

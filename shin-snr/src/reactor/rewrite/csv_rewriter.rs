@@ -5,7 +5,7 @@ use serde::{de, Deserialize};
 use shin_versions::{AnyStringKind, MessageCommandStyle};
 
 use crate::{
-    message_parser::lint::diagnostics::LineReport,
+    layout::message_parser::lint::diagnostics::LineReport,
     reactor::{rewrite::StringRewriter, AnyStringSource, StringArraySource, StringSource},
 };
 
@@ -146,9 +146,13 @@ impl CsvData {
                 continue;
             };
 
-            if let Err(report) =
-                crate::message_parser::lint::lint_string(&bump, s, style, line.source, index)
-            {
+            if let Err(report) = crate::layout::message_parser::lint::lint_string(
+                &bump,
+                s,
+                style,
+                line.source,
+                index,
+            ) {
                 reports.push(report);
                 if reports.len() >= 64 {
                     // too many errors, stop

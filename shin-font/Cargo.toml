@@ -1,0 +1,23 @@
+[package]
+name = "shin-font"
+version = "0.1.0"
+edition = "2024"
+description = "A library to extract and package .fnt files used by shin engine"
+
+authors.workspace = true
+repository.workspace = true
+homepage.workspace = true
+license.workspace = true
+
+[dependencies]
+shin-versions = { path = "../shin-versions", features = ["clap"] }
+shin-text = { path = "../shin-text" }
+
+bytes = "1.10.0"
+
+binrw = "0.14.1"
+image = { version = "0.25.5", default-features = false }
+
+
+[dev-dependencies]
+image = { version = "0.25.5", default-features = false, features = ["png"] }

@@ -27,7 +27,7 @@ impl StringRewriter for NoopRewriter {
         _instr_offset: u32,
         source: AnyStringSource,
     ) -> Option<&'bump str> {
-        let transformed = crate::message_parser::transform(
+        let transformed = crate::layout::message_parser::transform(
             bump,
             raw_decoded,
             self.snr_style,

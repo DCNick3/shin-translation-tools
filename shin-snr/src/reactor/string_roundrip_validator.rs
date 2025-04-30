@@ -9,6 +9,7 @@ use shin_versions::{MessageCommandStyle, MessageFixupPolicy};
 use unicode_width::UnicodeWidthChar as _;
 
 use crate::{
+    layout::message_parser::MessageReflowMode,
     reactor::{AnyStringSource, Reactor, StringArraySource, StringSource},
     reader::Reader,
 };
@@ -161,18 +162,20 @@ fn roundrip_string(
     // need to do two transforms to simulate what running a full roundtrip would do (from in_style into out_style and back)
     // first transform into what the user would see
     let user_transformed =
-        crate::message_parser::transform(bump, decoded, snr_style, user_style, source);
+        crate::layout::message_parser::transform(bump, decoded, snr_style, user_style, source);
 
     // and then transform back into what the game would see
-    let (game_transformed, fixup_policy) = crate::message_parser::transform_and_infer_fixup_policy(
-        bump,
-        user_transformed,
-        user_style,
-        snr_style,
-        policy,
-        FixupDetectResult::merge_all(&fixup_map),
-        source,
-    );
+    let (game_transformed, fixup_policy) =
+        crate::layout::message_parser::transform_reflow_and_infer_fixup_policy(
+            bump,
+            user_transformed,
+            user_style,
+            MessageReflowMode::NoReflow,
+            snr_style,
+            policy,
+            FixupDetectResult::merge_all(&fixup_map),
+            source,
+        );
     validate_fixup_policy(game_transformed, fixup_map.as_slice(), fixup_policy);
     assert_eq!(decoded, game_transformed);
 

@@ -1,4 +1,5 @@
 pub mod lint;
+pub mod sink;
 
 use std::str::CharIndices;
 
@@ -6,16 +7,41 @@ use bumpalo::{
     collections::{String, Vec},
     vec, Bump,
 };
+use shin_font::FontMetrics;
 use shin_text::FixupDetectResult;
 use shin_versions::{MessageCommandStyle, MessageFixupPolicy};
+use sink::{CountingStringSink, FullStringSink, StringSink, TokenSink};
 
-use crate::reactor::AnyStringSource;
+use crate::{layout::layouter::GameLayoutInfo, reactor::AnyStringSource};
 
+#[derive(Copy, Clone, Debug)]
+pub enum ParseIntArgError {
+    NoArgument,
+    InvalidArgument,
+}
+#[derive(Copy, Clone, Debug)]
 pub struct CommandToken<'b> {
     pub command: char,
     pub argument: Option<&'b str>,
 }
 
+impl<'b> CommandToken<'b> {
+    pub fn parse_int_arg(self) -> Result<u32, ParseIntArgError> {
+        let Some(arg) = self.argument else {
+            return Err(ParseIntArgError::NoArgument);
+        };
+        // NOTE: newer engine versions support HEX arguments here
+        // older version is extremely permissive and just does `-0x30` to the s-jis codepoint without any validation
+        // we currently only support the lowest common denominator:
+        // only decimals and explicit error on anything else (unlike the original code that returns -1)
+        let Ok(arg) = arg.parse::<u32>() else {
+            return Err(ParseIntArgError::InvalidArgument);
+        };
+        Ok(arg)
+    }
+}
+
+#[derive(Debug, Copy, Clone)]
 pub enum MessageToken<'b> {
     Literal(char),
     Command(CommandToken<'b>),
@@ -174,74 +200,6 @@ impl MessageCommand {
     }
 }
 
-pub trait StringSink {
-    fn push(&mut self, c: char, fixup: bool);
-    fn push_str(&mut self, s: &str, fixup: bool);
-}
-
-impl<'b> StringSink for String<'b> {
-    fn push(&mut self, c: char, _fixup: bool) {
-        self.push(c);
-    }
-
-    fn push_str(&mut self, s: &str, _fixup: bool) {
-        self.push_str(s);
-    }
-}
-
-pub struct CountingStringSink {
-    pub char_count: usize,
-    pub utf8_byte_count: usize,
-}
-
-impl CountingStringSink {
-    pub fn new() -> Self {
-        Self {
-            char_count: 0,
-            utf8_byte_count: 0,
-        }
-    }
-}
-
-impl StringSink for CountingStringSink {
-    fn push(&mut self, c: char, _fixup: bool) {
-        self.char_count += 1;
-        self.utf8_byte_count += c.len_utf8();
-    }
-
-    fn push_str(&mut self, s: &str, _fixup: bool) {
-        self.char_count += s.chars().count();
-        self.utf8_byte_count += s.len();
-    }
-}
-
-pub struct FullStringSink<'b> {
-    pub string: String<'b>,
-    pub fixup: Vec<'b, bool>,
-}
-
-impl<'b> FullStringSink<'b> {
-    pub fn new(bump: &'b Bump, capacity_chars: usize, capacity_bytes: usize) -> Self {
-        Self {
-            string: String::with_capacity_in(capacity_bytes, bump),
-            fixup: Vec::with_capacity_in(capacity_chars, bump),
-        }
-    }
-}
-
-impl StringSink for FullStringSink<'_> {
-    fn push(&mut self, c: char, fixup: bool) {
-        self.string.push(c);
-        self.fixup.push(fixup);
-    }
-
-    fn push_str(&mut self, s: &str, fixup: bool) {
-        self.string.push_str(s);
-        self.fixup
-            .extend(std::iter::repeat(fixup).take(s.chars().count()));
-    }
-}
-
 pub fn serialize<S>(
     style: MessageCommandStyle,
     policy: MessageFixupPolicy,
@@ -357,22 +315,6 @@ pub fn serialize_full<'bump>(
     )
 }
 
-pub trait TokenSink<'bump> {
-    fn push(&mut self, start: usize, end: usize, token: MessageToken<'bump>);
-}
-
-impl<'bump> TokenSink<'bump> for Vec<'bump, MessageToken<'bump>> {
-    fn push(&mut self, _start: usize, _end: usize, token: MessageToken<'bump>) {
-        self.push(token);
-    }
-}
-
-impl<'bump> TokenSink<'bump> for Vec<'bump, SpannedMessageToken<'bump>> {
-    fn push(&mut self, start: usize, end: usize, token: MessageToken<'bump>) {
-        self.push(SpannedMessageToken { start, end, token });
-    }
-}
-
 pub fn parse<'bump, S: TokenSink<'bump>>(
     style: MessageCommandStyle,
     message: &'bump str,
@@ -474,7 +416,6 @@ pub fn parse<'bump, S: TokenSink<'bump>>(
     }
 }
 
-#[expect(unused)] // not currently used, but it's nice to have it standalone I guess...
 pub fn infer_string_fixup_policy<'bump>(
     bump: &'bump Bump,
     decoded: &str,
@@ -506,13 +447,28 @@ pub fn infer_string_fixup_policy<'bump>(
     }
 }
 
+#[derive(Default, Clone, Copy)]
+pub enum MessageReflowMode<'a> {
+    /// Do not attempt to reflow text to introduce additional line breaks.
+    #[default]
+    NoReflow,
+    /// Use a greedy algorithm to insert hardbreaks (@r) to correctly word-wrap western text.
+    ///
+    /// This uses UAX#14 to identify possible line break points.
+    Greedy {
+        metrics: &'a FontMetrics,
+        layout: GameLayoutInfo,
+    },
+}
+
 /// Combines [`transform`] and [`infer_string_fixup_policy`] into a single pass.
 ///
 /// This is more efficient that doing those separately, since it only parses the message once.
-pub fn transform_and_infer_fixup_policy<'bump>(
+pub fn transform_reflow_and_infer_fixup_policy<'bump>(
     bump: &'bump Bump,
     decoded: &'bump str,
     in_style: MessageCommandStyle,
+    reflow: MessageReflowMode,
     out_style: MessageCommandStyle,
     message_policy: MessageFixupPolicy,
     detected: FixupDetectResult,
@@ -521,6 +477,12 @@ pub fn transform_and_infer_fixup_policy<'bump>(
     if source.contains_commands() {
         let mut tokens = Vec::new_in(bump);
         parse(in_style, decoded, &mut tokens);
+
+        if let MessageReflowMode::Greedy { metrics, layout } = reflow {
+            let mut tokens_out = Vec::new_in(bump);
+            super::reflow::reflow_message(bump, metrics, layout, &tokens, &mut tokens_out);
+            tokens = tokens_out;
+        }
 
         let (serialized_string, fixup_policy) = if detected == FixupDetectResult::UnfixedUp {
             // if the original string ignored fixups, hijack the policy to do the same

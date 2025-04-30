@@ -6,6 +6,7 @@ members = [
     "shin-rom",
     "shin-snr",
     "shin-tl",
+    "shin-font",
 ]
 
 [workspace.package]
@@ -39,3 +40,6 @@ tag-prefix = ""
 inherits = "release"
 debug = false
 lto = "thin"
+
+[profile.dev.package.ruzstd]
+opt-level = 3

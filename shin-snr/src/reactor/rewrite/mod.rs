@@ -14,6 +14,7 @@ pub use self::{
     x_rewriter::XRewriter,
 };
 use crate::{
+    layout::message_parser::MessageReflowMode,
     reactor::{AnyStringSource, Reactor, StringArraySource, StringSource},
     reader::Reader,
 };
@@ -149,18 +150,20 @@ impl<W: io::Write> RewriteMode for EmitMode<W> {
     fn instr_start(&mut self, _in_offset: u32) {}
 }
 
-struct Stringer<R> {
+struct Stringer<'a, R> {
     bump: Bump,
     snr_style: MessageCommandStyle,
     user_style: MessageCommandStyle,
+    reflow_mode: MessageReflowMode<'a>,
     policy: MessageFixupPolicy,
     rewriter: R,
 }
 
-impl<R> Stringer<R> {
+impl<'a, R> Stringer<'a, R> {
     pub fn new(
         snr_style: MessageCommandStyle,
         user_style: MessageCommandStyle,
+        reflow_mode: MessageReflowMode<'a>,
         policy: MessageFixupPolicy,
         rewriter: R,
     ) -> Self {
@@ -168,6 +171,7 @@ impl<R> Stringer<R> {
             bump: Bump::new(),
             snr_style,
             user_style,
+            reflow_mode,
             policy,
             rewriter,
         }
@@ -179,7 +183,7 @@ impl<R> Stringer<R> {
     }
 }
 
-impl<R: StringRewriter> Stringer<R> {
+impl<'a, R: StringRewriter> Stringer<'a, R> {
     /// Rewrites a string using the rewriter.
     ///
     /// The string may not actually be rewritten if the rewriter returns None.
@@ -210,10 +214,11 @@ impl<R: StringRewriter> Stringer<R> {
             shin_text::detect_fixup(original, &mut fixup_detect_result).unwrap();
 
             let (transformed, fixup_policy) =
-                crate::message_parser::transform_and_infer_fixup_policy(
+                crate::layout::message_parser::transform_reflow_and_infer_fixup_policy(
                     &self.bump,
                     replacement,
                     self.user_style,
+                    self.reflow_mode,
                     self.snr_style,
                     self.policy,
                     fixup_detect_result,
@@ -240,7 +245,7 @@ struct Position {
 pub struct RewriteReactor<'a, R, M> {
     reader: Reader<'a>,
     position: Position,
-    stringer: Stringer<R>,
+    stringer: Stringer<'a, R>,
     mode: M,
 }
 
@@ -249,6 +254,7 @@ impl<'a, R> RewriteReactor<'a, R, BuildOffsetMapMode> {
         reader: Reader<'a>,
         snr_style: MessageCommandStyle,
         user_style: MessageCommandStyle,
+        reflow_mode: MessageReflowMode<'a>,
         policy: MessageFixupPolicy,
         rewriter: R,
         initial_out_position: u32,
@@ -257,7 +263,7 @@ impl<'a, R> RewriteReactor<'a, R, BuildOffsetMapMode> {
         Self {
             reader,
             position: Default::default(),
-            stringer: Stringer::new(snr_style, user_style, policy, rewriter),
+            stringer: Stringer::new(snr_style, user_style, reflow_mode, policy, rewriter),
             mode: BuildOffsetMapMode {
                 builder: OffsetMapBuilder::new(),
                 initial_in_position,

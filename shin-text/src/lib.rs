@@ -74,6 +74,20 @@ fn is_extended(c: u8) -> bool {
     matches!(c, 0x81..=0x9f | 0xe0..=0xfc)
 }
 
+pub fn decode_sjis_codepoint(codepoint: u16, fixup: bool) -> char {
+    if codepoint < 0x100 {
+        // single-byte
+        let codepoint = codepoint as u8;
+        assert!(!is_extended(codepoint));
+        decode_single_sjis_char(codepoint, fixup)
+    } else {
+        // double-byte
+        let [first, second] = codepoint.to_be_bytes();
+        assert!(is_extended(first));
+        decode_double_sjis_char(first, second)
+    }
+}
+
 /// Decode a Shift-JIS encoded string to UTF-8
 ///
 /// Despite the zstring in the name, the function can work with either zero-terminated or non-zero terminated Shift-JIS strings.
@@ -315,6 +329,18 @@ where
             panic!("not enough elements in the fixup policy iterator");
         })
     }
+}
+
+pub fn encode_sjis_codepoint(codepoint: char, fixup: bool) -> Option<u16> {
+    let mut sjis = map_char_to_sjis(codepoint)?;
+
+    if fixup {
+        if let Some(position) = SJIS_FIXUP_ENTRIES.iter().position(|&c| c == sjis) {
+            sjis = (KATAKANA_START + position as u8) as u16;
+        }
+    }
+
+    Some(sjis)
 }
 
 /// Encode a UTF-8 string into a zero-terminated Shift-JIS string

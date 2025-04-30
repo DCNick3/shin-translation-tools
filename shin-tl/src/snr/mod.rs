@@ -1,13 +1,16 @@
 use std::{
     fs::File,
-    io::{BufWriter, Seek, Write},
+    io::{BufWriter, Read, Seek, Write},
 };
 
 use camino::Utf8PathBuf;
 use clap::{Args, Subcommand};
+use shin_font::FontMetrics;
 use shin_snr::{
+    layout::{layouter::GameLayoutInfo, message_parser::MessageReflowMode},
     react_with,
     reactor::{
+        dump_bin::DumpBinReactor,
         location_painter::LocationPainterReactor,
         offset_validator::OffsetValidatorReactor,
         rewrite::{
@@ -50,6 +53,37 @@ impl MessageStylePolicy {
     }
 }
 
+#[derive(Default, Debug, Copy, Clone, Eq, PartialEq, clap::ValueEnum)]
+pub enum CliMessageReflowMode {
+    /// Do not attempt to reflow text to introduce additional line breaks.
+    #[default]
+    NoReflow,
+    /// Use a greedy algorithm to insert hardbreaks (@r) to correctly word-wrap western text.
+    ///
+    /// This uses UAX#14 to identify possible line break points.
+    Greedy,
+}
+
+impl CliMessageReflowMode {
+    pub fn materialize(
+        self,
+        shin_version: ShinVersion,
+        font: Option<&FontMetrics>,
+    ) -> MessageReflowMode {
+        match self {
+            CliMessageReflowMode::NoReflow => {
+                MessageReflowMode::NoReflow
+            }
+            CliMessageReflowMode::Greedy => {
+                MessageReflowMode::Greedy {
+                    metrics: &font.expect("Message reflowing requires a corresponding font file (supplied with --font-file option)"),
+                    layout: GameLayoutInfo::for_version(shin_version).expect("This engine version doesn't support text reflowing yet"),
+                }
+            }
+        }
+    }
+}
+
 /// Rewrite shin SNR file with translated strings
 ///
 /// TL;DR:
@@ -72,6 +106,7 @@ pub enum Command {
         /// NOTE: make sure that the same value of this option is used in `shin-tl snr rewrite`
         #[clap(long, value_enum, default_value_t)]
         message_style: MessageStylePolicy,
+        /// Path to the output CSV file
         output: Utf8PathBuf,
     },
     /// Read strings from an SNR file and dump them to the console
@@ -81,6 +116,15 @@ pub enum Command {
         /// Change the way message commands are transformed
         #[clap(long, value_enum, default_value_t)]
         message_style: MessageStylePolicy,
+    },
+    /// Read strings from an SNR file and dump messages (MSGSET and LOGSET) to a bin file, separated by null terminators.
+    ///
+    /// The messages are **not** passed through the Shift-JIS decoder, outputting them as-is. Useful to feed the data to other tools in a simpler format.
+    ReadToBin {
+        #[clap(flatten)]
+        common: CommonArgs,
+        /// Path to the output BIN file
+        output: Utf8PathBuf,
     },
     /// Read SNR file, while validating jump offsets in the code
     ReadValidateOffsets {
@@ -93,6 +137,8 @@ pub enum Command {
     Test {
         #[clap(flatten)]
         common: CommonArgs,
+        font_file: Option<Utf8PathBuf>,
+        layout_dump_file: Option<Utf8PathBuf>,
     },
     /// Rewrite an SNR file to use translated strings from a CSV file
     Rewrite {
@@ -109,6 +155,12 @@ pub enum Command {
         /// Controls which columns from CSV file are used to replace strings
         #[clap(long, value_enum, default_value_t)]
         replacement_mode: StringReplacementMode,
+        /// Reflow the text to insert line breaks for line wrapping
+        #[clap(long, value_enum, default_value_t)]
+        reflow_mode: CliMessageReflowMode,
+        /// Path to the font file for --reflow-mode option
+        #[clap(long, value_enum)]
+        font_file: Option<Utf8PathBuf>,
         /// Path to the CSV file with translations
         ///
         /// A template can be created with `shin-tl snr read`
@@ -118,12 +170,13 @@ pub enum Command {
     },
 }
 
-fn rewrite_snr<R, O>(
+fn rewrite_snr<'a, R, O>(
     snr_file: &[u8],
     reader: Reader,
     code_offset: u32,
     version: ShinVersion,
     user_style: MessageCommandStyle,
+    reflow_mode: MessageReflowMode<'a>,
     rewriter: R,
     mut output: &mut O,
 ) where
@@ -134,6 +187,7 @@ fn rewrite_snr<R, O>(
         reader,
         version.message_command_style(),
         user_style,
+        reflow_mode,
         version.message_fixup_policy(),
         rewriter,
         code_offset,
@@ -234,6 +288,7 @@ impl Command {
         let common = match &self {
             Command::Read { common, .. } => common,
             Command::ReadConsole { common, .. } => common,
+            Command::ReadToBin { common, .. } => common,
             Command::ReadValidateOffsets { common, .. } => common,
             Command::Test { common, .. } => common,
             Command::Rewrite { common, .. } => common,
@@ -278,6 +333,13 @@ impl Command {
 
                 react_with(&mut reactor, version);
             }
+            Command::ReadToBin { common: _, output } => {
+                let mut output = File::create(&output).expect("Opening the BIN file failed");
+
+                let mut reactor = DumpBinReactor::new(reader, &mut output);
+
+                react_with(&mut reactor, version);
+            }
             Command::ReadValidateOffsets { common: _ } => {
                 let mut reactor = OffsetValidatorReactor::new(reader);
 
@@ -292,7 +354,11 @@ impl Command {
                     }
                 }
             }
-            Command::Test { common: _ } => {
+            Command::Test {
+                common: _,
+                font_file,
+                layout_dump_file,
+            } => {
                 // test roundtrips through two command styles
                 // this also tests a case that we currently do not expose to the user: converting an escaped SNR into an unescaped CSV
                 // but it doesn't hurt to test it
@@ -324,6 +390,7 @@ impl Command {
                         code_offset,
                         version,
                         user_style,
+                        MessageReflowMode::NoReflow,
                         rewriter,
                         &mut output,
                     );
@@ -344,17 +411,52 @@ impl Command {
                         bindiff_snr(version, snr_file.as_slice(), output.as_slice());
                     }
                 }
+
+                // test the layouter against the provided layout dump (if present)
+                // TODO: use let chains here
+                if let (Some(font_file), Some(layout_dump_file)) = (font_file, layout_dump_file) {
+                    let mut decoder = ruzstd::decoding::StreamingDecoder::new(
+                        File::open(&layout_dump_file).expect("Failed to read layout dump file"),
+                    )
+                    .expect("Failed to create streaming zstd decoder");
+                    let mut layout_dump_file = Vec::new();
+                    decoder
+                        .read_to_end(&mut layout_dump_file)
+                        .expect("Failed to decompress the layout dump");
+
+                    let layout_dump = shin_snr::layout::layout_dump::parse_dump(&layout_dump_file);
+                    drop(layout_dump_file);
+
+                    let mut font = File::open(&font_file).expect("Failed to open font file");
+                    let font = shin_font::FontMetrics::from_font0(&mut font)
+                        .expect("Failed to parse font");
+
+                    shin_snr::layout::layouter::validate_light_layouter_against_dump(
+                        &font,
+                        &layout_dump,
+                    );
+                }
             }
             Command::Rewrite {
                 common: _,
                 message_style,
                 no_lint,
                 replacement_mode,
+                reflow_mode,
+                font_file,
                 translations,
                 output,
             } => {
                 let snr_style = version.message_command_style();
                 let user_style = message_style.apply(snr_style);
+
+                let font_file = font_file.map(|path| {
+                    let mut font_file = File::open(&path).expect("Opening the font file failed");
+                    // TODO: support font formats other than font0
+                    FontMetrics::from_font0(&mut font_file).expect("Failed to read font file")
+                });
+
+                let reflow_mode = reflow_mode.materialize(version, font_file.as_ref());
 
                 let translations =
                     csv::Reader::from_path(translations).expect("Opening the CSV file failed");
@@ -384,6 +486,7 @@ impl Command {
                     code_offset,
                     version,
                     user_style,
+                    reflow_mode,
                     rewriter,
                     &mut output,
                 );

@@ -3,7 +3,7 @@ use miette::{SourceOffset, SourceSpan};
 use shin_versions::MessageCommandStyle;
 
 use crate::{
-    message_parser::{lint::diagnostics::LineReport, MessageCommand, MessageToken},
+    layout::message_parser::{lint::diagnostics::LineReport, MessageCommand, MessageToken},
     reactor::AnyStringSource,
 };
 

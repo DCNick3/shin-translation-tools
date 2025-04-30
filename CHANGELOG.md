@@ -1,3 +1,10 @@
+# Unreleased
+
+This version adds support for text reflowing, allowing to bake-in linebreaks that are more natural for western
+languages.
+
+This is only implemented for Higurashi no Naku Koro ni Sui (`PCSG00517`) for now.
+
 # Version 0.9.0
 
 This version includes features that make it easier to translate older versions of the engines using unescaped commands,

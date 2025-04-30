@@ -1,5 +1,6 @@
 use shin_versions::{AnyStringKind, StringArrayKind, StringKind};
 
+pub mod dump_bin;
 pub mod location_painter;
 pub mod offset_validator;
 pub mod rewrite;
