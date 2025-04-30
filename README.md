@@ -8,7 +8,7 @@ I've already made a few tools for this engine:
   data
 
 However, they target relatively modern versions of the engine (the former - switch's umineko, the latter - switch's
-higurashi).
+higurashi) and require a lot of work to add support for other versions.
 
 The aim of this project is to provide tools that cover a wider range of versions.
 
@@ -62,9 +62,7 @@ Then re-start the shell or source the generated file
 ## Game support
 
 Although ROM files are supported for all versions of the engine, the SNR translation tool requires support for each game
-separately. See "shin-tl snr support" column
-in [this spreadsheet](https://docs.google.com/spreadsheets/d/1wGX9FOQq_iXcWMnY9qITCAV7hq1R7_gpWwjkT4_tKDI/edit#gid=0) to
-find out which games are supported.
+separately. See "shin-tl snr support" column in [this spreadsheet][games] to find out which games are supported.
 
 Af of writing this readme, vita versions of "AstralAir no Shiroki Towa -White Eternity-", "ALIA's CARNIVAL!
 Sacrament" and "Higurashi no Naku Koro ni Sui" along with switch version of "D.C.4 -Da Capo 4-" are supported.
@@ -124,7 +122,7 @@ The format of the SNR files varies greatly with the engine version, and it does 
 version it is. Thus, you need to supply the engine version to the tool.
 
 See "shin-tl name" column
-of [this spreadsheet](https://docs.google.com/spreadsheets/d/1wGX9FOQq_iXcWMnY9qITCAV7hq1R7_gpWwjkT4_tKDI/edit#gid=0)
+of [this spreadsheet][games]
 corresponding to your game to find out what to put here.
 
 The `strings.csv` file will contain the extracted strings. It can be edited with a spreadsheet editor like Excel or
@@ -168,6 +166,8 @@ shin-tl snr rewrite <engine-version> <main.snr> <translation.csv> <main_translat
 
 This will read the translation csv, replace the strings in the snr file and write the result to `main_translated.snr`.
 
+NOTE: you almost surely want to use text reflow options, see [this section](#soft-line-breaks) for details
+
 ### Rebuild the rom file
 
 After touching all the files you wanted to translate, you would need to package them back into a `.rom` file.
@@ -186,7 +186,7 @@ This will package all files and directories inside `rom-dir` into a `patch.rom` 
 
 Note that the rom format varies from game to game, so you need to supply either the rom format (`rom1-v2-1`, `rom2-v1-0`
 or `rom2-v1-1`) or the engine version to the tool. You can see the correspondence
-in [this spreadsheet](https://docs.google.com/spreadsheets/d/1wGX9FOQq_iXcWMnY9qITCAV7hq1R7_gpWwjkT4_tKDI).
+in [this spreadsheet][games].
 
 After that, you can put the `patch.rom` file back into the game (however it is done on the platform you are working
 with).
@@ -210,10 +210,10 @@ I am aware of two styles of the commands used in different versions of the engin
   escape those. Example: `語り手rvhello.!H!e!l!l!o.`
 
 One version only ever uses a single style. You can see which is which in
-the [game spreadsheet](https://docs.google.com/spreadsheets/d/1wGX9FOQq_iXcWMnY9qITCAV7hq1R7_gpWwjkT4_tKDI).
+the [game spreadsheet][games].
 
 For documentation on which commands does what, you can
-check [this spreadsheet](https://docs.google.com/spreadsheets/d/1HNYDUVUSKz9JTHieH7t8zYIt06KFTeOxExSCO6ZjatU/edit#gid=1796226786).
+check [this spreadsheet][layout-commands].
 
 ### Dealing with ASCII characters in older games
 
@@ -228,6 +228,38 @@ equivalent unescaped form, using `!` to escape all literal ASCII characters.
 Note that if you don't pass `--message-style modernize` to `snr rewrire`, the tool will generate an SNR file with
 escaped commands that the engine won't be able to parse correctly. Hopefully, the enabled-by-default linting should help
 you detect this.
+
+## Soft line breaks
+
+The `shin` engine was not designed with western languages in mind, and so it's line breaking rules do not implement the
+usual word-wrapping logic that is applicable to western languages. It implements kinsoku shori which, basically, allows
+line breaks to be inserted everywhere except with some punctuation marks. What this means for western language
+translations though, is that without additional care taken, the game will simply insert linebreaks in the middle of
+words, which is not nice.
+
+To help you with this, `shin-translation-tools` implements text reflowing, allowing you to bake in some hard
+linebreaks (`@r`), so that the game would not have to try and fail to line break itself. For this, a subset of game's
+layouter is reimplemented which will position the characters and break them in positions which
+[UAX#14](https://www.unicode.org/reports/tr14/) (Unicode line breaking algorithm) will allow. This should support
+wide set of western languages and possibly some non-western ones too (although I have not tested this).
+
+### Text reflowing with `shin-translation-tools`
+
+To reflow the text, in addition to the SNR file, you would need the FNT file used for messages in the game. Different
+games use different font files (and names), so you can find which file you want in the
+[games spreadsheet][games] (`message font` column).
+
+With font in hand, you have to pass it to `rewrite` command with `--font-file <path-to-fnt>` and ask for reflow with
+`--reflow-mode greedy`. The full command line utilizing both message style modernization and reflowing could look like
+this:
+
+`shin-tl snr rewrite --font-file gothic.fnt --reflow-mode greedy --message-style modernize higurashi-sui main.snr translation.csv main_translated.snr`
+
+NOTE: currently text reflowing is implemented only for `higurashi-sui`.
+
+[games]: https://docs.google.com/spreadsheets/d/1wGX9FOQq_iXcWMnY9qITCAV7hq1R7_gpWwjkT4_tKDI
+
+[layout-commands]: https://docs.google.com/spreadsheets/d/1HNYDUVUSKz9JTHieH7t8zYIt06KFTeOxExSCO6ZjatU/edit#gid=1796226786
 
 ## Alternatives
 

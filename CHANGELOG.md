@@ -1,7 +1,7 @@
 # Unreleased
 
 This version adds support for text reflowing, allowing to bake-in linebreaks that are more natural for western
-languages.
+languages. See [this README section](README.md#text-reflowing-with-shin-translation-tools) for usage documentation
 
 This is only implemented for Higurashi no Naku Koro ni Sui (`PCSG00517`) for now.
 
