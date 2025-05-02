@@ -1,4 +1,4 @@
-# Unreleased
+# Version 0.10.1
 
 - Adds support for Gensou Rougoku no Kaleidoscope 2 scenarios (`0100451020714000`, released on 2025-03-14)
 
