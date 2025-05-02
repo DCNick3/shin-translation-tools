@@ -96,6 +96,8 @@ pub enum Instruction {
     VOICESTOP,
     VOICEWAIT,
 
+    SYSSE,
+
     SAVEINFO,
     // only on old
     MOVIE,
@@ -104,6 +106,7 @@ pub enum Instruction {
     EVEND,
     RESUMESET,
     RESUME,
+    SYSCALL,
 
     TROPHY,
     UNLOCK,

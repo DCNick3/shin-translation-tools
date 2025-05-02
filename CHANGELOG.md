@@ -1,3 +1,7 @@
+# Unreleased
+
+- Adds support for Gensou Rougoku no Kaleidoscope 2 scenarios (`0100451020714000`, released on 2025-03-14)
+
 # Version 0.10.0
 
 This version adds support for text reflowing, allowing to bake-in linebreaks that are more natural for western

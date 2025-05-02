@@ -5,8 +5,8 @@ mod x_rewriter;
 use std::{collections::HashMap, io};
 
 use bumpalo::{collections::Vec, Bump};
-use shin_text::{decode_sjis_zstring, encode_sjis_zstring, FixupDetectResult, StringArrayIter};
-use shin_versions::{MessageCommandStyle, MessageFixupPolicy};
+use shin_text::{encode_sjis_zstring, FixupDetectResult, StringArrayIter};
+use shin_versions::{MessageCommandStyle, StringPolicy};
 
 pub use self::{
     csv_rewriter::{CsvData, CsvRewriter, StringReplacementMode},
@@ -17,6 +17,7 @@ use crate::{
     layout::message_parser::MessageReflowMode,
     reactor::{AnyStringSource, Reactor, StringArraySource, StringSource},
     reader::Reader,
+    text::{decode_zstring, encode_utf8_zstring},
 };
 
 #[derive(Default)]
@@ -155,7 +156,7 @@ struct Stringer<'a, R> {
     snr_style: MessageCommandStyle,
     user_style: MessageCommandStyle,
     reflow_mode: MessageReflowMode<'a>,
-    policy: MessageFixupPolicy,
+    policy: StringPolicy,
     rewriter: R,
 }
 
@@ -164,7 +165,7 @@ impl<'a, R> Stringer<'a, R> {
         snr_style: MessageCommandStyle,
         user_style: MessageCommandStyle,
         reflow_mode: MessageReflowMode<'a>,
-        policy: MessageFixupPolicy,
+        policy: StringPolicy,
         rewriter: R,
     ) -> Self {
         Self {
@@ -200,9 +201,14 @@ impl<'a, R: StringRewriter> Stringer<'a, R> {
             Some(0),
             "string is not zero-terminated"
         );
+        let original_decoded = decode_zstring(
+            &self.bump,
+            self.policy.encoding(),
+            original,
+            source.contains_commands(),
+        )
+        .unwrap();
 
-        let original_decoded =
-            decode_sjis_zstring(&self.bump, original, source.contains_commands()).unwrap();
         let result = if let Some(replacement) = self.rewriter.rewrite_string(
             &self.bump,
             original_decoded,
@@ -210,21 +216,36 @@ impl<'a, R: StringRewriter> Stringer<'a, R> {
             position.current_instr_offset,
             source,
         ) {
-            let mut fixup_detect_result = FixupDetectResult::NoFixupCharacters;
-            shin_text::detect_fixup(original, &mut fixup_detect_result).unwrap();
+            match self.policy {
+                StringPolicy::ShiftJis(policy) => {
+                    let mut fixup_detect_result = FixupDetectResult::NoFixupCharacters;
+                    shin_text::detect_fixup(original, &mut fixup_detect_result).unwrap();
 
-            let (transformed, fixup_policy) =
-                crate::layout::message_parser::transform_reflow_and_infer_fixup_policy(
-                    &self.bump,
-                    replacement,
-                    self.user_style,
-                    self.reflow_mode,
-                    self.snr_style,
-                    self.policy,
-                    fixup_detect_result,
-                    source,
-                );
-            encode_sjis_zstring(&self.bump, transformed, fixup_policy).unwrap()
+                    let (transformed, fixup_policy) =
+                        crate::layout::message_parser::transform_reflow_and_infer_fixup_policy(
+                            &self.bump,
+                            replacement,
+                            self.user_style,
+                            self.reflow_mode,
+                            self.snr_style,
+                            policy,
+                            fixup_detect_result,
+                            source,
+                        );
+                    encode_sjis_zstring(&self.bump, transformed, fixup_policy).unwrap()
+                }
+                StringPolicy::Utf8 => {
+                    let transformed = crate::layout::message_parser::transform_reflow(
+                        &self.bump,
+                        replacement,
+                        self.user_style,
+                        self.reflow_mode,
+                        self.snr_style,
+                        source,
+                    );
+                    encode_utf8_zstring(&self.bump, transformed)
+                }
+            }
         } else {
             original
         };
@@ -255,7 +276,7 @@ impl<'a, R> RewriteReactor<'a, R, BuildOffsetMapMode> {
         snr_style: MessageCommandStyle,
         user_style: MessageCommandStyle,
         reflow_mode: MessageReflowMode<'a>,
-        policy: MessageFixupPolicy,
+        policy: StringPolicy,
         rewriter: R,
         initial_out_position: u32,
     ) -> Self {

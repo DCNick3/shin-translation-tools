@@ -103,7 +103,7 @@ pub fn reflow_message<'s>(
 #[cfg(test)]
 mod test {
     use bumpalo::{collections::Vec, Bump};
-    use shin_versions::{MessageCommandStyle, MessageFixupPolicy, ShinVersion};
+    use shin_versions::{MessageCommandStyle, ShinVersion, SjisMessageFixupPolicy};
 
     use crate::layout::{
         layouter, layouter::GameLayoutInfo, message_parser, reflow::reflow_paragraph,
@@ -149,7 +149,7 @@ mod test {
         let mut s = String::new();
         message_parser::serialize(
             MessageCommandStyle::Escaped,
-            MessageFixupPolicy {
+            SjisMessageFixupPolicy {
                 fixup_command_arguments: false,
                 fixup_character_names: false,
             },

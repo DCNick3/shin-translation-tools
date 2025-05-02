@@ -2,13 +2,15 @@ mod console;
 mod csv;
 
 use bumpalo::Bump;
-use shin_text::{decode_sjis_zstring, StringArrayIter};
-use shin_versions::MessageCommandStyle;
+use shin_text::StringArrayIter;
+use shin_versions::{MessageCommandStyle, StringEncoding};
 
 pub use self::{console::ConsoleTraceListener, csv::CsvTraceListener};
 use crate::{
+    layout::message_parser::MessageReflowMode,
     reactor::{AnyStringSource, Reactor, StringArraySource, StringSource},
     reader::Reader,
+    text::decode_zstring,
 };
 
 pub trait StringTraceListener {
@@ -18,6 +20,7 @@ pub trait StringTraceListener {
 pub struct StringTraceReactor<'a, L> {
     reader: Reader<'a>,
     current_instr_offset: u32,
+    string_encoding: StringEncoding,
     snr_style: MessageCommandStyle,
     user_style: MessageCommandStyle,
     listener: L,
@@ -27,6 +30,7 @@ pub struct StringTraceReactor<'a, L> {
 impl<'a, L> StringTraceReactor<'a, L> {
     pub fn new(
         reader: Reader<'a>,
+        string_encoding: StringEncoding,
         snr_style: MessageCommandStyle,
         user_style: MessageCommandStyle,
         listener: L,
@@ -34,6 +38,7 @@ impl<'a, L> StringTraceReactor<'a, L> {
         Self {
             reader,
             current_instr_offset: 0,
+            string_encoding,
             snr_style,
             user_style,
             listener,
@@ -45,16 +50,23 @@ impl<'a, L> StringTraceReactor<'a, L> {
 fn on_string_impl<'bump, L: StringTraceListener>(
     listener: &mut L,
     bump: &'bump Bump,
+    string_encoding: StringEncoding,
     snr_style: MessageCommandStyle,
     user_style: MessageCommandStyle,
     instr_offset: u32,
     source: AnyStringSource,
     s: &'bump [u8],
 ) {
-    let snr_string = decode_sjis_zstring(bump, s, source.contains_commands()).unwrap();
+    let snr_string = decode_zstring(bump, string_encoding, s, source.contains_commands()).unwrap();
 
-    let user_string =
-        crate::layout::message_parser::transform(bump, snr_string, snr_style, user_style, source);
+    let user_string = crate::layout::message_parser::transform_reflow(
+        bump,
+        snr_string,
+        snr_style,
+        MessageReflowMode::NoReflow,
+        user_style,
+        source,
+    );
 
     listener.on_string(instr_offset, source, user_string)
 }
@@ -62,6 +74,7 @@ fn on_string_impl<'bump, L: StringTraceListener>(
 fn on_string_array_impl<'bump, L: StringTraceListener>(
     listener: &mut L,
     bump: &'bump Bump,
+    string_encoding: StringEncoding,
     snr_style: MessageCommandStyle,
     user_style: MessageCommandStyle,
     instr_offset: u32,
@@ -72,6 +85,7 @@ fn on_string_array_impl<'bump, L: StringTraceListener>(
         on_string_impl(
             listener,
             bump,
+            string_encoding,
             snr_style,
             user_style,
             instr_offset,
@@ -107,6 +121,7 @@ impl<'a, L: StringTraceListener> Reactor for StringTraceReactor<'a, L> {
         on_string_impl(
             &mut self.listener,
             &self.bump,
+            self.string_encoding,
             self.snr_style,
             self.user_style,
             self.current_instr_offset,
@@ -120,6 +135,7 @@ impl<'a, L: StringTraceListener> Reactor for StringTraceReactor<'a, L> {
         on_string_impl(
             &mut self.listener,
             &self.bump,
+            self.string_encoding,
             self.snr_style,
             self.user_style,
             self.current_instr_offset,
@@ -133,6 +149,7 @@ impl<'a, L: StringTraceListener> Reactor for StringTraceReactor<'a, L> {
         on_string_array_impl(
             &mut self.listener,
             &self.bump,
+            self.string_encoding,
             self.snr_style,
             self.user_style,
             self.current_instr_offset,
@@ -146,6 +163,7 @@ impl<'a, L: StringTraceListener> Reactor for StringTraceReactor<'a, L> {
         on_string_array_impl(
             &mut self.listener,
             &self.bump,
+            self.string_encoding,
             self.snr_style,
             self.user_style,
             self.current_instr_offset,

@@ -28,6 +28,8 @@ pub enum ShinVersion {
     DC4,
     /// 2020-08-27 Switch `01004920105FC000`
     Konosuba,
+    /// 2025-03-14 Switch `0100451020714000`
+    Gerokasu2,
 }
 
 /// Describes how `NumberSpec` is encoded in a particular version
@@ -89,7 +91,7 @@ pub enum LengthKind {
 }
 
 #[derive(Debug, Copy, Clone, Eq, PartialEq)]
-pub struct MessageFixupPolicy {
+pub struct SjisMessageFixupPolicy {
     pub fixup_command_arguments: bool,
     pub fixup_character_names: bool,
 }
@@ -100,6 +102,27 @@ pub enum MessageCommandStyle {
     Unescaped,
 }
 
+#[derive(Debug, Copy, Clone, Eq, PartialEq)]
+pub enum StringEncoding {
+    ShiftJis,
+    Utf8,
+}
+
+#[derive(Debug, Copy, Clone, Eq, PartialEq)]
+pub enum StringPolicy {
+    ShiftJis(SjisMessageFixupPolicy),
+    Utf8,
+}
+
+impl StringPolicy {
+    pub fn encoding(&self) -> StringEncoding {
+        match self {
+            StringPolicy::ShiftJis(_) => StringEncoding::ShiftJis,
+            StringPolicy::Utf8 => StringEncoding::Utf8,
+        }
+    }
+}
+
 impl ShinVersion {
     pub fn number_spec_style(&self) -> NumberSpecStyle {
         use NumberSpecStyle::*;
@@ -107,7 +130,7 @@ impl ShinVersion {
 
         match self {
             HigurashiSui | AliasCarnival | WhiteEternity => Short,
-            DC4 | Konosuba => VarInt,
+            DC4 | Konosuba | Gerokasu2 => VarInt,
         }
     }
 
@@ -117,7 +140,7 @@ impl ShinVersion {
 
         match self {
             HigurashiSui | AliasCarnival => LengthKind::U8Length,
-            WhiteEternity | DC4 | Konosuba => LengthKind::U16Length,
+            WhiteEternity | DC4 | Konosuba | Gerokasu2 => LengthKind::U16Length,
         }
     }
 
@@ -165,6 +188,13 @@ impl ShinVersion {
                     unreachable!()
                 }
             },
+            Gerokasu2 => match kind {
+                Msgset | Select | Voiceplay | Saveinfo | Dbgout => U16Length,
+                Logset | Named | Stageinfo | Chatset => {
+                    // not in this game
+                    unreachable!()
+                }
+            },
         };
 
         StringStyle { size_kind }
@@ -191,33 +221,39 @@ impl ShinVersion {
             Konosuba => match kind {
                 SelectChoice => U8Length,
             },
+            Gerokasu2 => match kind {
+                SelectChoice => U16Length,
+            },
         };
 
         StringStyle { size_kind }
     }
 
-    pub fn message_fixup_policy(&self) -> MessageFixupPolicy {
+    pub fn string_policy(&self) -> StringPolicy {
+        use ShinVersion::*;
+
         match self {
-            ShinVersion::HigurashiSui => MessageFixupPolicy {
+            HigurashiSui => StringPolicy::ShiftJis(SjisMessageFixupPolicy {
                 fixup_command_arguments: false,
                 fixup_character_names: false,
-            },
-            ShinVersion::AliasCarnival => MessageFixupPolicy {
+            }),
+            AliasCarnival => StringPolicy::ShiftJis(SjisMessageFixupPolicy {
                 fixup_command_arguments: false,
                 fixup_character_names: false,
-            },
-            ShinVersion::WhiteEternity => MessageFixupPolicy {
+            }),
+            WhiteEternity => StringPolicy::ShiftJis(SjisMessageFixupPolicy {
                 fixup_command_arguments: false,
                 fixup_character_names: true,
-            },
-            ShinVersion::DC4 => MessageFixupPolicy {
+            }),
+            DC4 => StringPolicy::ShiftJis(SjisMessageFixupPolicy {
                 fixup_command_arguments: true,
                 fixup_character_names: false,
-            },
-            ShinVersion::Konosuba => MessageFixupPolicy {
+            }),
+            Konosuba => StringPolicy::ShiftJis(SjisMessageFixupPolicy {
                 fixup_command_arguments: true, // < doesn't matter, no fixuppable command arguments
                 fixup_character_names: false, // < doesn't matter, no fixuppable chars in chara names
-            },
+            }),
+            Gerokasu2 => StringPolicy::Utf8,
         }
     }
 
@@ -226,10 +262,15 @@ impl ShinVersion {
             ShinVersion::HigurashiSui | ShinVersion::AliasCarnival => {
                 MessageCommandStyle::Unescaped
             }
-            ShinVersion::WhiteEternity | ShinVersion::DC4 | ShinVersion::Konosuba => {
-                MessageCommandStyle::Escaped
-            }
+            ShinVersion::WhiteEternity
+            | ShinVersion::DC4
+            | ShinVersion::Konosuba
+            | ShinVersion::Gerokasu2 => MessageCommandStyle::Escaped,
         }
+    }
+
+    pub fn string_encoding(&self) -> StringEncoding {
+        self.string_policy().encoding()
     }
 
     pub fn rom_version(&self) -> Option<RomVersion> {
@@ -240,6 +281,7 @@ impl ShinVersion {
             AliasCarnival => Rom2V1_0,
             WhiteEternity => Rom2V1_0,
             DC4 => Rom2V1_1,
+            Gerokasu2 => Rom2V1_1,
             // konosuba doesn't store its assets in the rom, it just uses switch's romfs
             Konosuba => return None,
         })

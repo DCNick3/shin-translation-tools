@@ -2,22 +2,21 @@ use std::iter;
 
 use bumpalo::{collections::Vec, Bump};
 use owo_colors::OwoColorize;
-use shin_text::{
-    decode_sjis_zstring, detect_fixup, encode_sjis_zstring, FixupDetectResult, StringArrayIter,
-};
-use shin_versions::{MessageCommandStyle, MessageFixupPolicy};
+use shin_text::{detect_fixup, encode_sjis_zstring, FixupDetectResult, StringArrayIter};
+use shin_versions::{MessageCommandStyle, StringPolicy};
 use unicode_width::UnicodeWidthChar as _;
 
 use crate::{
     layout::message_parser::MessageReflowMode,
     reactor::{AnyStringSource, Reactor, StringArraySource, StringSource},
     reader::Reader,
+    text::{decode_zstring, encode_utf8_zstring},
 };
 
 pub struct StringRoundtripValidatorReactor<'a> {
     snr_style: MessageCommandStyle,
     user_style: MessageCommandStyle,
-    policy: MessageFixupPolicy,
+    policy: StringPolicy,
     reader: Reader<'a>,
     bump: Bump,
 }
@@ -26,7 +25,7 @@ impl<'a> StringRoundtripValidatorReactor<'a> {
     pub fn new(
         snr_style: MessageCommandStyle,
         user_style: MessageCommandStyle,
-        policy: MessageFixupPolicy,
+        policy: StringPolicy,
         reader: Reader<'a>,
     ) -> Self {
         Self {
@@ -144,10 +143,10 @@ fn roundrip_string(
     s: &[u8],
     snr_style: MessageCommandStyle,
     user_style: MessageCommandStyle,
-    policy: MessageFixupPolicy,
+    policy: StringPolicy,
     source: AnyStringSource,
 ) {
-    let decoded = decode_sjis_zstring(bump, s, source.contains_commands()).unwrap();
+    let decoded = decode_zstring(bump, policy.encoding(), s, source.contains_commands()).unwrap();
 
     if decoded.contains(|v| shin_text::UNFIXED_UP_CHARACTERS.contains(&v)) {
         panic!(
@@ -156,33 +155,59 @@ fn roundrip_string(
         );
     }
 
-    let mut fixup_map = Vec::with_capacity_in(s.len(), bump);
-    detect_fixup(s, &mut fixup_map).unwrap();
-
     // need to do two transforms to simulate what running a full roundtrip would do (from in_style into out_style and back)
     // first transform into what the user would see
-    let user_transformed =
-        crate::layout::message_parser::transform(bump, decoded, snr_style, user_style, source);
+    let user_transformed = crate::layout::message_parser::transform_reflow(
+        bump,
+        decoded,
+        snr_style,
+        MessageReflowMode::NoReflow,
+        user_style,
+        source,
+    );
 
-    // and then transform back into what the game would see
-    let (game_transformed, fixup_policy) =
-        crate::layout::message_parser::transform_reflow_and_infer_fixup_policy(
-            bump,
-            user_transformed,
-            user_style,
-            MessageReflowMode::NoReflow,
-            snr_style,
-            policy,
-            FixupDetectResult::merge_all(&fixup_map),
-            source,
-        );
-    validate_fixup_policy(game_transformed, fixup_map.as_slice(), fixup_policy);
-    assert_eq!(decoded, game_transformed);
+    match policy {
+        StringPolicy::ShiftJis(policy) => {
+            let mut fixup_map = Vec::with_capacity_in(s.len(), bump);
+            detect_fixup(s, &mut fixup_map).unwrap();
 
-    let reencoded = encode_sjis_zstring(bump, game_transformed, fixup_policy).unwrap();
+            // and then transform back into what the game would see
+            let (game_transformed, fixup_policy) =
+                crate::layout::message_parser::transform_reflow_and_infer_fixup_policy(
+                    bump,
+                    user_transformed,
+                    user_style,
+                    MessageReflowMode::NoReflow,
+                    snr_style,
+                    policy,
+                    FixupDetectResult::merge_all(&fixup_map),
+                    source,
+                );
+            validate_fixup_policy(game_transformed, fixup_map.as_slice(), fixup_policy);
+            assert_eq!(decoded, game_transformed);
 
-    if s != reencoded {
-        format_mismatch(s, reencoded, decoded);
+            let reencoded = encode_sjis_zstring(bump, game_transformed, fixup_policy).unwrap();
+
+            if s != reencoded {
+                format_mismatch(s, reencoded, decoded);
+            }
+        }
+        StringPolicy::Utf8 => {
+            let game_transformed = crate::layout::message_parser::transform_reflow(
+                bump,
+                user_transformed,
+                user_style,
+                MessageReflowMode::NoReflow,
+                snr_style,
+                source,
+            );
+
+            assert_eq!(decoded, game_transformed);
+
+            let reencoded = encode_utf8_zstring(bump, game_transformed);
+
+            assert_eq!(s, reencoded);
+        }
     }
 }
 
@@ -191,7 +216,7 @@ fn roundrip_string_array(
     ss: &[u8],
     snr_style: MessageCommandStyle,
     user_style: MessageCommandStyle,
-    policy: MessageFixupPolicy,
+    policy: StringPolicy,
     source: StringArraySource,
 ) {
     for (i, s) in (0..).zip(StringArrayIter::new(ss)) {

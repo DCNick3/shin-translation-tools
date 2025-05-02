@@ -188,7 +188,7 @@ fn rewrite_snr<'a, R, O>(
         version.message_command_style(),
         user_style,
         reflow_mode,
-        version.message_fixup_policy(),
+        version.string_policy(),
         rewriter,
         code_offset,
     );
@@ -310,10 +310,12 @@ impl Command {
             } => {
                 let writer = csv::Writer::from_path(output).expect("Opening the CSV file failed");
 
+                let encoding = version.string_encoding();
                 let snr_style = version.message_command_style();
                 let user_style = message_style.apply(snr_style);
                 let mut reactor = StringTraceReactor::new(
                     reader,
+                    encoding,
                     snr_style,
                     user_style,
                     CsvTraceListener::new(writer),
@@ -325,11 +327,17 @@ impl Command {
                 common: _,
                 message_style,
             } => {
+                let encoding = version.string_encoding();
                 let snr_style = version.message_command_style();
                 let user_style = message_style.apply(snr_style);
 
-                let mut reactor =
-                    StringTraceReactor::new(reader, snr_style, user_style, ConsoleTraceListener);
+                let mut reactor = StringTraceReactor::new(
+                    reader,
+                    encoding,
+                    snr_style,
+                    user_style,
+                    ConsoleTraceListener,
+                );
 
                 react_with(&mut reactor, version);
             }
@@ -368,7 +376,7 @@ impl Command {
                     let mut reactor = StringRoundtripValidatorReactor::new(
                         snr_style,
                         user_style,
-                        version.message_fixup_policy(),
+                        version.string_policy(),
                         reader.clone(),
                     );
 

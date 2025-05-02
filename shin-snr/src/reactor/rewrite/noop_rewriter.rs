@@ -1,7 +1,10 @@
 use bumpalo::Bump;
 use shin_versions::MessageCommandStyle;
 
-use crate::reactor::{rewrite::StringRewriter, AnyStringSource};
+use crate::{
+    layout::message_parser::MessageReflowMode,
+    reactor::{rewrite::StringRewriter, AnyStringSource},
+};
 
 /// Exercises the string encoder and decoder, but does not actually rewrite strings.
 pub struct NoopRewriter {
@@ -27,10 +30,11 @@ impl StringRewriter for NoopRewriter {
         _instr_offset: u32,
         source: AnyStringSource,
     ) -> Option<&'bump str> {
-        let transformed = crate::layout::message_parser::transform(
+        let transformed = crate::layout::message_parser::transform_reflow(
             bump,
             raw_decoded,
             self.snr_style,
+            MessageReflowMode::NoReflow,
             self.user_style,
             source,
         );

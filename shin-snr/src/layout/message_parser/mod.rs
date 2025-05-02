@@ -9,7 +9,7 @@ use bumpalo::{
 };
 use shin_font::FontMetrics;
 use shin_text::FixupDetectResult;
-use shin_versions::{MessageCommandStyle, MessageFixupPolicy};
+use shin_versions::{MessageCommandStyle, SjisMessageFixupPolicy};
 use sink::{CountingStringSink, FullStringSink, StringSink, TokenSink};
 
 use crate::{layout::layouter::GameLayoutInfo, reactor::AnyStringSource};
@@ -202,7 +202,7 @@ impl MessageCommand {
 
 pub fn serialize<S>(
     style: MessageCommandStyle,
-    policy: MessageFixupPolicy,
+    policy: SjisMessageFixupPolicy,
     is_in_messagebox: bool,
     tokens: &[MessageToken],
     sink: &mut S,
@@ -272,7 +272,7 @@ pub fn serialize_string<'bump>(
 ) -> &'bump str {
     // when we don't care about the fixup map, the policy doesn't matter
     // make up some random one
-    let policy = MessageFixupPolicy {
+    let policy = SjisMessageFixupPolicy {
         fixup_command_arguments: false,
         fixup_character_names: false,
     };
@@ -291,7 +291,7 @@ pub fn serialize_string<'bump>(
 pub fn serialize_full<'bump>(
     bump: &'bump Bump,
     style: MessageCommandStyle,
-    policy: MessageFixupPolicy,
+    policy: SjisMessageFixupPolicy,
     is_in_messagebox: bool,
     tokens: &[MessageToken],
 ) -> (&'bump str, &'bump [bool]) {
@@ -420,7 +420,7 @@ pub fn infer_string_fixup_policy<'bump>(
     bump: &'bump Bump,
     decoded: &str,
     style: MessageCommandStyle,
-    message_policy: MessageFixupPolicy,
+    message_policy: SjisMessageFixupPolicy,
     detected: FixupDetectResult,
     source: AnyStringSource,
 ) -> &'bump [bool] {
@@ -461,7 +461,7 @@ pub enum MessageReflowMode<'a> {
     },
 }
 
-/// Combines [`transform`] and [`infer_string_fixup_policy`] into a single pass.
+/// Combines [`transform_reflow`] and [`infer_string_fixup_policy`] into a single pass.
 ///
 /// This is more efficient that doing those separately, since it only parses the message once.
 pub fn transform_reflow_and_infer_fixup_policy<'bump>(
@@ -470,7 +470,7 @@ pub fn transform_reflow_and_infer_fixup_policy<'bump>(
     in_style: MessageCommandStyle,
     reflow: MessageReflowMode,
     out_style: MessageCommandStyle,
-    message_policy: MessageFixupPolicy,
+    message_policy: SjisMessageFixupPolicy,
     detected: FixupDetectResult,
     source: AnyStringSource,
 ) -> (&'bump str, &'bump [bool]) {
@@ -478,10 +478,12 @@ pub fn transform_reflow_and_infer_fixup_policy<'bump>(
         let mut tokens = Vec::new_in(bump);
         parse(in_style, decoded, &mut tokens);
 
-        if let MessageReflowMode::Greedy { metrics, layout } = reflow {
-            let mut tokens_out = Vec::new_in(bump);
-            super::reflow::reflow_message(bump, metrics, layout, &tokens, &mut tokens_out);
-            tokens = tokens_out;
+        if source.is_for_messagebox() {
+            if let MessageReflowMode::Greedy { metrics, layout } = reflow {
+                let mut tokens_out = Vec::new_in(bump);
+                super::reflow::reflow_message(bump, metrics, layout, &tokens, &mut tokens_out);
+                tokens = tokens_out;
+            }
         }
 
         let (serialized_string, fixup_policy) = if detected == FixupDetectResult::UnfixedUp {
@@ -517,16 +519,26 @@ pub fn transform_reflow_and_infer_fixup_policy<'bump>(
     }
 }
 
-pub fn transform<'bump>(
+pub fn transform_reflow<'bump>(
     bump: &'bump Bump,
     decoded: &'bump str,
     in_style: MessageCommandStyle,
+    reflow: MessageReflowMode,
     out_style: MessageCommandStyle,
     source: AnyStringSource,
 ) -> &'bump str {
     if source.contains_commands() {
         let mut tokens = Vec::new_in(bump);
         parse(in_style, decoded, &mut tokens);
+
+        if source.is_for_messagebox() {
+            if let MessageReflowMode::Greedy { metrics, layout } = reflow {
+                let mut tokens_out = Vec::new_in(bump);
+                super::reflow::reflow_message(bump, metrics, layout, &tokens, &mut tokens_out);
+                tokens = tokens_out;
+            }
+        }
+
         let serialized_string = serialize_string(bump, out_style, &tokens);
         if in_style == out_style {
             // just a sanity check

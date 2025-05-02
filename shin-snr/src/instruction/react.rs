@@ -55,7 +55,7 @@ pub fn react_instr<R: Reactor>(ctx: &mut Ctx<R>, instr: Instruction) {
             ctx.reg();
             ctx.number();
             let number_count = ctx.mm_gt_st_length();
-            // NOTE: in umineko, these are padded to 4 bytes to allow for seeking
+            // NOTE: with varint-based numbers, these are padded to 4 bytes to allow for seeking
             // with NumberSpecStyle::Short, this is not necessary
             for _ in 0..number_count {
                 ctx.padnumber();
@@ -140,7 +140,7 @@ pub fn react_instr<R: Reactor>(ctx: &mut Ctx<R>, instr: Instruction) {
             ShinVersion::HigurashiSui | ShinVersion::AliasCarnival => {
                 ctx.number();
             }
-            ShinVersion::WhiteEternity | ShinVersion::DC4 => {
+            ShinVersion::WhiteEternity | ShinVersion::DC4 | ShinVersion::Gerokasu2 => {
                 ctx.byte();
                 ctx.number();
             }
@@ -158,14 +158,19 @@ pub fn react_instr<R: Reactor>(ctx: &mut Ctx<R>, instr: Instruction) {
         }
         Instruction::WAIT => match ctx.version() {
             ShinVersion::HigurashiSui | ShinVersion::AliasCarnival => ctx.number(),
-            ShinVersion::WhiteEternity | ShinVersion::DC4 | ShinVersion::Konosuba => {
+            ShinVersion::WhiteEternity
+            | ShinVersion::DC4
+            | ShinVersion::Konosuba
+            | ShinVersion::Gerokasu2 => {
                 ctx.byte();
                 ctx.number();
             }
         },
         Instruction::KEYWAIT => match ctx.version() {
             ShinVersion::HigurashiSui | ShinVersion::AliasCarnival => ctx.number(),
-            ShinVersion::WhiteEternity | ShinVersion::DC4 => unreachable!(),
+            ShinVersion::WhiteEternity | ShinVersion::DC4 | ShinVersion::Gerokasu2 => {
+                unreachable!()
+            }
             ShinVersion::Konosuba => {
                 todo!()
             }
@@ -175,7 +180,7 @@ pub fn react_instr<R: Reactor>(ctx: &mut Ctx<R>, instr: Instruction) {
                 ctx.number();
                 ctx.number();
             }
-            ShinVersion::DC4 | ShinVersion::Konosuba => {
+            ShinVersion::DC4 | ShinVersion::Konosuba | ShinVersion::Gerokasu2 => {
                 ctx.number();
             }
         },
@@ -200,6 +205,9 @@ pub fn react_instr<R: Reactor>(ctx: &mut Ctx<R>, instr: Instruction) {
                 ShinVersion::Konosuba => {
                     // nothing here
                 }
+                ShinVersion::Gerokasu2 => {
+                    ctx.number();
+                }
             }
 
             ctx.string(StringSource::Msgset(msgid));
@@ -214,7 +222,10 @@ pub fn react_instr<R: Reactor>(ctx: &mut Ctx<R>, instr: Instruction) {
         }
         Instruction::MSGCLOSE => match ctx.version() {
             ShinVersion::HigurashiSui | ShinVersion::AliasCarnival => {}
-            ShinVersion::WhiteEternity | ShinVersion::DC4 | ShinVersion::Konosuba => {
+            ShinVersion::WhiteEternity
+            | ShinVersion::DC4
+            | ShinVersion::Konosuba
+            | ShinVersion::Gerokasu2 => {
                 ctx.byte();
             }
         },
@@ -232,7 +243,7 @@ pub fn react_instr<R: Reactor>(ctx: &mut Ctx<R>, instr: Instruction) {
                 ctx.number();
                 ctx.number();
             }
-            ShinVersion::WhiteEternity | ShinVersion::DC4 => ctx.number(),
+            ShinVersion::WhiteEternity | ShinVersion::DC4 | ShinVersion::Gerokasu2 => ctx.number(),
             ShinVersion::Konosuba => {
                 todo!()
             }
@@ -244,7 +255,7 @@ pub fn react_instr<R: Reactor>(ctx: &mut Ctx<R>, instr: Instruction) {
                 ctx.string(StringSource::Logset)
             }
             ShinVersion::WhiteEternity => ctx.string(StringSource::Logset),
-            ShinVersion::DC4 => {
+            ShinVersion::DC4 | ShinVersion::Gerokasu2 => {
                 unreachable!()
             }
             ShinVersion::Konosuba => {
@@ -286,7 +297,8 @@ pub fn react_instr<R: Reactor>(ctx: &mut Ctx<R>, instr: Instruction) {
             ShinVersion::AliasCarnival
             | ShinVersion::WhiteEternity
             | ShinVersion::DC4
-            | ShinVersion::Konosuba => {
+            | ShinVersion::Konosuba
+            | ShinVersion::Gerokasu2 => {
                 ctx.number();
                 ctx.number();
                 ctx.number();
@@ -331,7 +343,7 @@ pub fn react_instr<R: Reactor>(ctx: &mut Ctx<R>, instr: Instruction) {
                 ctx.number();
                 ctx.number();
             }
-            ShinVersion::DC4 | ShinVersion::Konosuba => {
+            ShinVersion::DC4 | ShinVersion::Konosuba | ShinVersion::Gerokasu2 => {
                 // 7x number
                 ctx.number();
                 ctx.number();
@@ -375,7 +387,7 @@ pub fn react_instr<R: Reactor>(ctx: &mut Ctx<R>, instr: Instruction) {
                 ctx.number();
                 ctx.number();
             }
-            ShinVersion::DC4 | ShinVersion::Konosuba => {
+            ShinVersion::DC4 | ShinVersion::Konosuba | ShinVersion::Gerokasu2 => {
                 ctx.number();
                 ctx.number();
                 ctx.number();
@@ -396,6 +408,11 @@ pub fn react_instr<R: Reactor>(ctx: &mut Ctx<R>, instr: Instruction) {
         Instruction::VOICEWAIT => {
             ctx.number();
         }
+        Instruction::SYSSE => {
+            ctx.number();
+            ctx.number();
+        }
+
         Instruction::SAVEINFO => {
             ctx.number();
             ctx.string(StringSource::Saveinfo);
@@ -410,6 +427,10 @@ pub fn react_instr<R: Reactor>(ctx: &mut Ctx<R>, instr: Instruction) {
         Instruction::EVEND => {}
         Instruction::RESUMESET => {}
         Instruction::RESUME => {}
+        Instruction::SYSCALL => {
+            ctx.number();
+            ctx.number();
+        }
         Instruction::TROPHY => {
             ctx.number();
         }
@@ -441,7 +462,8 @@ pub fn react_instr<R: Reactor>(ctx: &mut Ctx<R>, instr: Instruction) {
             ShinVersion::AliasCarnival
             | ShinVersion::WhiteEternity
             | ShinVersion::DC4
-            | ShinVersion::Konosuba => {
+            | ShinVersion::Konosuba
+            | ShinVersion::Gerokasu2 => {
                 ctx.number();
                 let count = ctx.byte();
                 for _ in 0..count {
@@ -595,9 +617,22 @@ pub fn react_instr<R: Reactor>(ctx: &mut Ctx<R>, instr: Instruction) {
         }
         Instruction::QUIZ => {
             ctx.reg();
-            ctx.number();
-            ctx.number();
-            ctx.number();
+            match ctx.version() {
+                ShinVersion::HigurashiSui => {
+                    ctx.number();
+                    ctx.number();
+                    ctx.number();
+                }
+                ShinVersion::Gerokasu2 => {
+                    ctx.number();
+                }
+                ShinVersion::AliasCarnival
+                | ShinVersion::WhiteEternity
+                | ShinVersion::DC4
+                | ShinVersion::Konosuba => {
+                    unreachable!()
+                }
+            }
         }
         Instruction::FAKESELECT => {}
 
@@ -607,7 +642,10 @@ pub fn react_instr<R: Reactor>(ctx: &mut Ctx<R>, instr: Instruction) {
                 ctx.string(StringSource::Dbgout);
                 ctx.short();
             }
-            ShinVersion::WhiteEternity | ShinVersion::DC4 | ShinVersion::Konosuba => {
+            ShinVersion::WhiteEternity
+            | ShinVersion::DC4
+            | ShinVersion::Konosuba
+            | ShinVersion::Gerokasu2 => {
                 ctx.string(StringSource::Dbgout);
                 let count = ctx.byte();
                 for _ in 0..count {

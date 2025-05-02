@@ -3,6 +3,7 @@ mod instruction;
 pub mod layout;
 pub mod reactor;
 pub mod reader;
+mod text;
 
 use shin_versions::ShinVersion;
 
