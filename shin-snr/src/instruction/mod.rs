@@ -109,7 +109,7 @@ pub enum Instruction {
     SYSCALL,
 
     TROPHY,
-    UNLOCK,
+    UNLOCK, // also in the game-specific section in Higurashi Hou
 
     // only on old
     LAYERCLEAR,
@@ -160,20 +160,24 @@ pub enum Instruction {
     VSET,
 
     // Higurashi Sui
-    TIPSGET, // also shared by Umineko
+    TIPSGET, // also shared by Higurashi Hou & Umineko
     CHARSEL,
-    OTSUGET,
-    CHART,
-    SNRSEL,
-    KAKERA,
-    KAKERAGET,
-    QUIZ, // also shared by Umineko and Gerokasu2
-    FAKESELECT,
+    OTSUGET,    // also shared by Higurashi Hou
+    CHART,      // also shared by Higurashi Hou
+    SNRSEL,     // also shared by Higurashi Hou
+    KAKERA,     // also shared by Higurashi Hou
+    KAKERAGET,  // also shared by Higurashi Hou
+    QUIZ,       // also shared by Higurashi Hou, Umineko and Gerokasu2
+    FAKESELECT, // also shared by Higurashi Hou
 
     // Umineko
     CHARS,
     SHOWCHARS,
     NOTIFYSET,
+
+    // Higurashi Hou
+    FEELICON,
+    CHARSELECT,
 
     // this is the last thing in the opcode space
     DEBUGOUT,

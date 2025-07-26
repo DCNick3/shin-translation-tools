@@ -25,6 +25,8 @@ pub enum ShinVersion {
     /// 2016-09-22 PSVita `PCSG00901`
     WhiteEternity,
 
+    /// 2018-07-26 Switch `0100F6A00A684000` Ver. 1.X
+    HigurashiHou,
     /// 2019-12-19 Switch `0100D8500EE14000`
     DC4,
     /// 2020-08-27 Switch `01004920105FC000`
@@ -133,7 +135,7 @@ impl ShinVersion {
 
         match self {
             HigurashiSui | AliasCarnival | WhiteEternity => Short,
-            DC4 | Konosuba | Umineko | Gerokasu2 => VarInt,
+            HigurashiHou | DC4 | Konosuba | Umineko | Gerokasu2 => VarInt,
         }
     }
 
@@ -143,7 +145,21 @@ impl ShinVersion {
 
         match self {
             HigurashiSui | AliasCarnival => LengthKind::U8Length,
-            WhiteEternity | DC4 | Konosuba | Umineko | Gerokasu2 => LengthKind::U16Length,
+            WhiteEternity | HigurashiHou | DC4 | Konosuba | Umineko | Gerokasu2 => {
+                LengthKind::U16Length
+            }
+        }
+    }
+
+    /// A length for gt and gosubt instructions
+    pub fn gt_gosubt_length(&self) -> LengthKind {
+        use ShinVersion::*;
+
+        match self {
+            HigurashiHou => LengthKind::U8Length,
+            HigurashiSui | AliasCarnival | WhiteEternity | DC4 | Konosuba | Umineko | Gerokasu2 => {
+                LengthKind::U16Length
+            }
         }
     }
 
@@ -169,6 +185,14 @@ impl ShinVersion {
                 }
             },
             WhiteEternity => match kind {
+                Saveinfo | Select | Dbgout | Voiceplay => U8Length,
+                Msgset | Logset => U16Length,
+                Chatset | Named | Stageinfo => {
+                    // not in this game
+                    unreachable!()
+                }
+            },
+            HigurashiHou => match kind {
                 Saveinfo | Select | Dbgout | Voiceplay => U8Length,
                 Msgset | Logset => U16Length,
                 Chatset | Named | Stageinfo => {
@@ -225,6 +249,9 @@ impl ShinVersion {
             WhiteEternity => match kind {
                 SelectChoice => U8Length,
             },
+            HigurashiHou => match kind {
+                SelectChoice => U8Length,
+            },
             DC4 => match kind {
                 SelectChoice => U16Length,
             },
@@ -260,6 +287,12 @@ impl ShinVersion {
                 fixup_command_arguments: false,
                 fixup_character_names: true,
             }),
+            HigurashiHou => StringPolicy::ShiftJis(SjisMessageFixupPolicy {
+                fixup_command_arguments: true,
+                // in reality, some character names are fixed up, while others are not :/
+                // the "ー" in "レポーター" is not fixed up, while the "ー" in "イェアソムール" is
+                fixup_character_names: false,
+            }),
             DC4 => StringPolicy::ShiftJis(SjisMessageFixupPolicy {
                 fixup_command_arguments: true,
                 fixup_character_names: false,
@@ -282,6 +315,7 @@ impl ShinVersion {
                 MessageCommandStyle::Unescaped
             }
             ShinVersion::WhiteEternity
+            | ShinVersion::HigurashiHou
             | ShinVersion::DC4
             | ShinVersion::Konosuba
             | ShinVersion::Umineko
@@ -300,6 +334,7 @@ impl ShinVersion {
             HigurashiSui => Rom2V1_0,
             AliasCarnival => Rom2V1_0,
             WhiteEternity => Rom2V1_0,
+            HigurashiHou => Rom2V1_0,
             DC4 => Rom2V1_1,
             Umineko => Rom2V1_1,
             Gerokasu2 => Rom2V1_1,

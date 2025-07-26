@@ -115,6 +115,14 @@ impl<'r, R: Reactor> Ctx<'r, R> {
         }
     }
 
+    /// A length for gt and gosubt instructions. Size depends on version (1 or 2 bytes)
+    pub fn gt_gosubt_length(&mut self) -> u16 {
+        match self.version.gt_gosubt_length() {
+            LengthKind::U8Length => self.byte() as u16,
+            LengthKind::U16Length => self.short(),
+        }
+    }
+
     /// A 4-byte jump offset into the snr file. Handled specially to allow for rewriting.
     pub fn offset(&mut self) {
         self.reactor.offset()
