@@ -160,15 +160,20 @@ pub enum Instruction {
     VSET,
 
     // Higurashi Sui
-    TIPSGET,
+    TIPSGET, // also shared by Umineko
     CHARSEL,
     OTSUGET,
     CHART,
     SNRSEL,
     KAKERA,
     KAKERAGET,
-    QUIZ,
+    QUIZ, // also shared by Umineko and Gerokasu2
     FAKESELECT,
+
+    // Umineko
+    CHARS,
+    SHOWCHARS,
+    NOTIFYSET,
 
     // this is the last thing in the opcode space
     DEBUGOUT,

@@ -24,10 +24,13 @@ pub enum ShinVersion {
     AliasCarnival,
     /// 2016-09-22 PSVita `PCSG00901`
     WhiteEternity,
+
     /// 2019-12-19 Switch `0100D8500EE14000`
     DC4,
     /// 2020-08-27 Switch `01004920105FC000`
     Konosuba,
+    /// 2021-01-28 Switch `01006A300BA2C000`
+    Umineko,
     /// 2025-03-14 Switch `0100451020714000`
     Gerokasu2,
 }
@@ -130,7 +133,7 @@ impl ShinVersion {
 
         match self {
             HigurashiSui | AliasCarnival | WhiteEternity => Short,
-            DC4 | Konosuba | Gerokasu2 => VarInt,
+            DC4 | Konosuba | Umineko | Gerokasu2 => VarInt,
         }
     }
 
@@ -140,7 +143,7 @@ impl ShinVersion {
 
         match self {
             HigurashiSui | AliasCarnival => LengthKind::U8Length,
-            WhiteEternity | DC4 | Konosuba | Gerokasu2 => LengthKind::U16Length,
+            WhiteEternity | DC4 | Konosuba | Umineko | Gerokasu2 => LengthKind::U16Length,
         }
     }
 
@@ -188,6 +191,13 @@ impl ShinVersion {
                     unreachable!()
                 }
             },
+            Umineko => match kind {
+                Msgset | Select | Voiceplay | Saveinfo | Dbgout => U16Length,
+                Logset | Named | Stageinfo | Chatset => {
+                    // not in this game
+                    unreachable!()
+                }
+            },
             Gerokasu2 => match kind {
                 Msgset | Select | Voiceplay | Saveinfo | Dbgout => U16Length,
                 Logset | Named | Stageinfo | Chatset => {
@@ -221,6 +231,9 @@ impl ShinVersion {
             Konosuba => match kind {
                 SelectChoice => U8Length,
             },
+            Umineko => match kind {
+                SelectChoice => U16Length,
+            },
             Gerokasu2 => match kind {
                 SelectChoice => U16Length,
             },
@@ -232,6 +245,8 @@ impl ShinVersion {
     pub fn string_policy(&self) -> StringPolicy {
         use ShinVersion::*;
 
+        // NOTE: when adding those, be sure to do some mutation testing on roundtrip tests
+        // check if flipping each policy makes the roundtrip test fail and not if it's not the case
         match self {
             HigurashiSui => StringPolicy::ShiftJis(SjisMessageFixupPolicy {
                 fixup_command_arguments: false,
@@ -253,6 +268,10 @@ impl ShinVersion {
                 fixup_command_arguments: true, // < doesn't matter, no fixuppable command arguments
                 fixup_character_names: false, // < doesn't matter, no fixuppable chars in chara names
             }),
+            Umineko => StringPolicy::ShiftJis(SjisMessageFixupPolicy {
+                fixup_command_arguments: true,
+                fixup_character_names: false,
+            }),
             Gerokasu2 => StringPolicy::Utf8,
         }
     }
@@ -265,6 +284,7 @@ impl ShinVersion {
             ShinVersion::WhiteEternity
             | ShinVersion::DC4
             | ShinVersion::Konosuba
+            | ShinVersion::Umineko
             | ShinVersion::Gerokasu2 => MessageCommandStyle::Escaped,
         }
     }
@@ -281,6 +301,7 @@ impl ShinVersion {
             AliasCarnival => Rom2V1_0,
             WhiteEternity => Rom2V1_0,
             DC4 => Rom2V1_1,
+            Umineko => Rom2V1_1,
             Gerokasu2 => Rom2V1_1,
             // konosuba doesn't store its assets in the rom, it just uses switch's romfs
             Konosuba => return None,
