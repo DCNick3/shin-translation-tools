@@ -1,6 +1,6 @@
 [package]
 name = "shin-snr"
-version = "0.10.1"
+version = "0.10.2"
 edition = "2024"
 description = "A library to help translate strings within shin's SNR files."
 
