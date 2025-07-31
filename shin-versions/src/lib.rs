@@ -27,6 +27,8 @@ pub enum ShinVersion {
 
     /// 2018-07-26 Switch `0100F6A00A684000` Ver. 1.X
     HigurashiHou,
+    /// 2018-07-26 Switch `0100F6A00A684000` Ver. 2.X
+    HigurashiHouV2,
     /// 2019-12-19 Switch `0100D8500EE14000`
     DC4,
     /// 2020-08-27 Switch `01004920105FC000`
@@ -135,7 +137,7 @@ impl ShinVersion {
 
         match self {
             HigurashiSui | AliasCarnival | WhiteEternity => Short,
-            HigurashiHou | DC4 | Konosuba | Umineko | Gerokasu2 => VarInt,
+            HigurashiHou | HigurashiHouV2 | DC4 | Konosuba | Umineko | Gerokasu2 => VarInt,
         }
     }
 
@@ -145,9 +147,8 @@ impl ShinVersion {
 
         match self {
             HigurashiSui | AliasCarnival => LengthKind::U8Length,
-            WhiteEternity | HigurashiHou | DC4 | Konosuba | Umineko | Gerokasu2 => {
-                LengthKind::U16Length
-            }
+            WhiteEternity | HigurashiHou | HigurashiHouV2 | DC4 | Konosuba | Umineko
+            | Gerokasu2 => LengthKind::U16Length,
         }
     }
 
@@ -156,7 +157,9 @@ impl ShinVersion {
         use ShinVersion::*;
 
         match self {
-            HigurashiHou => LengthKind::U8Length,
+            HigurashiHou | HigurashiHouV2 => LengthKind::U8Length,
+            // TODO: are all those old versions __really__ all using u16?
+            // The trend has been in increasing the sizes, not randomly decreasing them for a single series
             HigurashiSui | AliasCarnival | WhiteEternity | DC4 | Konosuba | Umineko | Gerokasu2 => {
                 LengthKind::U16Length
             }
@@ -193,6 +196,14 @@ impl ShinVersion {
                 }
             },
             HigurashiHou => match kind {
+                Saveinfo | Select | Dbgout | Voiceplay => U8Length,
+                Msgset | Logset => U16Length,
+                Chatset | Named | Stageinfo => {
+                    // not in this game
+                    unreachable!()
+                }
+            },
+            HigurashiHouV2 => match kind {
                 Saveinfo | Select | Dbgout | Voiceplay => U8Length,
                 Msgset | Logset => U16Length,
                 Chatset | Named | Stageinfo => {
@@ -249,7 +260,7 @@ impl ShinVersion {
             WhiteEternity => match kind {
                 SelectChoice => U8Length,
             },
-            HigurashiHou => match kind {
+            HigurashiHou | HigurashiHouV2 => match kind {
                 SelectChoice => U8Length,
             },
             DC4 => match kind {
@@ -287,7 +298,7 @@ impl ShinVersion {
                 fixup_command_arguments: false,
                 fixup_character_names: true,
             }),
-            HigurashiHou => StringPolicy::ShiftJis(SjisMessageFixupPolicy {
+            HigurashiHou | HigurashiHouV2 => StringPolicy::ShiftJis(SjisMessageFixupPolicy {
                 fixup_command_arguments: true,
                 // in reality, some character names are fixed up, while others are not :/
                 // the "ー" in "レポーター" is not fixed up, while the "ー" in "イェアソムール" is
@@ -310,16 +321,12 @@ impl ShinVersion {
     }
 
     pub fn message_command_style(&self) -> MessageCommandStyle {
+        use ShinVersion::*;
+
         match self {
-            ShinVersion::HigurashiSui | ShinVersion::AliasCarnival => {
-                MessageCommandStyle::Unescaped
-            }
-            ShinVersion::WhiteEternity
-            | ShinVersion::HigurashiHou
-            | ShinVersion::DC4
-            | ShinVersion::Konosuba
-            | ShinVersion::Umineko
-            | ShinVersion::Gerokasu2 => MessageCommandStyle::Escaped,
+            HigurashiSui | AliasCarnival => MessageCommandStyle::Unescaped,
+            WhiteEternity | HigurashiHou | HigurashiHouV2 | DC4 | Konosuba | Umineko
+            | Gerokasu2 => MessageCommandStyle::Escaped,
         }
     }
 
@@ -335,6 +342,7 @@ impl ShinVersion {
             AliasCarnival => Rom2V1_0,
             WhiteEternity => Rom2V1_0,
             HigurashiHou => Rom2V1_0,
+            HigurashiHouV2 => Rom2V1_0,
             DC4 => Rom2V1_1,
             Umineko => Rom2V1_1,
             Gerokasu2 => Rom2V1_1,

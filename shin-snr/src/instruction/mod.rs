@@ -72,6 +72,8 @@ pub enum Instruction {
     MSGCHECK,
     // seen only in higurashi-sui
     MSGQUAKE,
+    // seen only in higurashi-hou-v2
+    MSGHIDE,
     LOGSET,
     SELECT,
     WIPE,
@@ -178,6 +180,10 @@ pub enum Instruction {
     // Higurashi Hou
     FEELICON,
     CHARSELECT,
+
+    // Higurashi Hou V2
+    KGET,
+    KSET,
 
     // this is the last thing in the opcode space
     DEBUGOUT,
