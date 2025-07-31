@@ -1,3 +1,14 @@
+# Version 0.10.2
+
+- Adds support for Umineko no Naku Koro ni Saku ~Nekobako to Musou no Koukyoukyoku~ (`01006A300BA2C000`, released on
+  2021-01-28)
+- Adds support for Higurashi no Naku Koro ni Hou (v1 and v2) (`0100F6A00A684000`, released on 2018-07-26) scenarios
+    - `shin-tl` can't produce scripts byte-for-byte equal to the original ones for now. This is due to inconsistent
+      usage of fixup encoding by the game. This is intended to be fixed. This should not leave to any noticeable in-game
+      behaviour differences, just makes the tool harder to validate.
+    - The 2.0.0 update changed the format of the scenario, so this game corresponds to two engine versions in `shin-tl`:
+      `higurashi-hou` and `higurashi-hou-v2`
+
 # Version 0.10.1
 
 - Adds support for Gensou Rougoku no Kaleidoscope 2 scenarios (`0100451020714000`, released on 2025-03-14)
