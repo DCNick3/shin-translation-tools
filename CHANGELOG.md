@@ -1,3 +1,9 @@
+# Version 0.10.3
+
+- Fixes a [bug](https://github.com/DCNick3/shin-translation-tools/issues/8) in ROM generation code
+  introduced in version v0.9.0 (commit 3da28051cf129d8d69670832db81679287f7c0fb). This bug caused an assert in some
+  input file sets, caused by mismatch between the ROM allocation and ROM writing code.
+
 # Version 0.10.2
 
 - Adds support for Umineko no Naku Koro ni Saku ~Nekobako to Musou no Koukyoukyoku~ (`01006A300BA2C000`, released on
