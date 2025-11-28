@@ -68,7 +68,7 @@ impl Allocator {
 
 struct AllocateDirectoryVisitor<'a, 'bump> {
     allocator: &'a mut Allocator,
-    directory_positions: collections::Vec<'bump, (u64, u64)>,
+    directory_positions: collections::Vec<'bump, FileSpan>,
 }
 
 impl<'a, 'bump, S> FsWalker<'bump, S> for AllocateDirectoryVisitor<'a, 'bump> {
@@ -109,14 +109,17 @@ impl<'a, 'bump, S> FsWalker<'bump, S> for AllocateDirectoryVisitor<'a, 'bump> {
 
         let my_size = alloc.position - my_offset;
 
-        self.directory_positions[index] = (my_offset, my_size);
+        self.directory_positions[index] = FileSpan {
+            offset: my_offset,
+            size: my_size,
+        };
     }
 }
 
 struct AllocateFileVisitor<'a, 'bump> {
     allocator: &'a mut Allocator,
     alignment: u64,
-    file_positions: collections::Vec<'bump, (u64, u64)>,
+    file_positions: collections::Vec<'bump, FileSpan>,
 }
 
 impl<'a, 'bump, S: FileSource> DirVisitor<'bump, S> for AllocateFileVisitor<'a, 'bump> {
@@ -140,7 +143,10 @@ impl<'a, 'bump, S: FileSource> DirVisitor<'bump, S> for AllocateFileVisitor<'a, 
         self.allocator.allocate(my_size);
 
         debug_assert_eq!(self.file_positions.len(), file_index);
-        self.file_positions.push((my_offset, my_size));
+        self.file_positions.push(FileSpan {
+            offset: my_offset,
+            size: my_size,
+        });
     }
 }
 
@@ -205,9 +211,29 @@ impl<'bump, S> FsWalker<'bump, S> for GatherEntryParents<'bump> {
     }
 }
 
+#[derive(Copy, Clone)]
+pub struct FileSpan {
+    pub offset: u64,
+    pub size: u64,
+}
+
+impl FileSpan {
+    /// A clearly invalid value to use on initialization
+    pub fn dummy() -> Self {
+        Self {
+            offset: u64::MAX,
+            size: u64::MAX,
+        }
+    }
+
+    pub fn end_offset(&self) -> u64 {
+        self.offset + self.size
+    }
+}
+
 pub struct AllocatedRom<'bump> {
-    pub directory_positions: &'bump [(u64, u64)],
-    pub file_positions: &'bump [(u64, u64)],
+    pub directory_positions: &'bump [FileSpan],
+    pub file_positions: &'bump [FileSpan],
     pub directory_parent_indices: &'bump [usize],
     pub index_offset: u64,
     pub index_size: u64,
@@ -242,8 +268,10 @@ pub fn rom_allocate<'bump, S: FileSource>(
         input,
         AllocateDirectoryVisitor {
             allocator: &mut allocator,
+            // FIXME: can we do this without using a "dummy" value?
+            // Or can we not do that because the traversal order is not the same as index order?
             directory_positions: collections::Vec::from_iter_in(
-                std::iter::repeat((u64::MAX, u64::MAX)).take(directory_count),
+                std::iter::repeat(FileSpan::dummy()).take(directory_count),
                 bump,
             ),
         },

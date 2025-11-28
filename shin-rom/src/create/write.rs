@@ -8,7 +8,7 @@ use tracing::trace;
 
 use crate::{
     create::{
-        allocate::{AllocatedRom, Allocator},
+        allocate::{AllocatedRom, Allocator, FileSpan},
         source::{FileSource, InputDirectory, InputFile},
         visit,
         visit::{DirVisitor, FsWalker},
@@ -57,8 +57,8 @@ struct WriteDirectoryInnerVisitor<'scratch, 'a, 'bump, W> {
 
     index_offset: u64,
     file_offset_multiplier: u64,
-    directory_positions: &'bump [(u64, u64)],
-    file_positions: &'bump [(u64, u64)],
+    directory_positions: &'bump [FileSpan],
+    file_positions: &'bump [FileSpan],
     writer: &'a mut WriteWrapper<W>,
     names_allocator: Allocator,
     names: collections::Vec<'scratch, &'bump [u8]>,
@@ -70,7 +70,7 @@ impl<'scratch, 'a, 'bump, W: io::Write> WriteDirectoryInnerVisitor<'scratch, 'a,
         name: &'bump str,
         encoded_name: &'bump [u8],
         is_directory: bool,
-        (mut offset, size): (u64, u64),
+        FileSpan { mut offset, size }: FileSpan,
     ) {
         self.names.push(encoded_name);
 
@@ -151,8 +151,8 @@ struct WriteDirectoryWalker<'a, 'bump, W> {
 
     index_offset: u64,
     file_offset_multiplier: u64,
-    directory_positions: &'bump [(u64, u64)],
-    file_positions: &'bump [(u64, u64)],
+    directory_positions: &'bump [FileSpan],
+    file_positions: &'bump [FileSpan],
     directory_parent_indices: &'bump [usize],
     // for the inner visitor
     directory_index: usize,
@@ -181,7 +181,7 @@ where
             .align(DIRECTORY_OFFSET_MULTIPLIER as u64)
             .expect("Failed to align");
 
-        assert_eq!(current_directory_position.0, self.writer.offset);
+        assert_eq!(current_directory_position.offset, self.writer.offset);
 
         let entry_count = directory.0.len() + 2; // 2 for "." and ".."
 
@@ -230,16 +230,13 @@ where
             self.writer.write_all(name).expect("Failed to write name");
         }
 
-        assert_eq!(
-            current_directory_position.0 + current_directory_position.1,
-            self.writer.offset
-        );
+        assert_eq!(current_directory_position.end_offset(), self.writer.offset);
     }
 }
 
 struct WriteFileVisitor<'a, 'bump, W> {
     file_offset_multiplier: u64,
-    file_positions: &'bump [(u64, u64)],
+    file_positions: &'bump [FileSpan],
     writer: &'a mut WriteWrapper<W>,
     progress: &'a mut RomProgress,
 }
@@ -255,7 +252,7 @@ impl<'a, 'bump, W: io::Write, S: FileSource> DirVisitor<'bump, S>
         path_buf: &mut Utf8PathBuf,
         file: &InputFile<S>,
     ) {
-        let (offset, size) = self.file_positions[index];
+        let FileSpan { offset, size } = self.file_positions[index];
         self.writer.align(self.file_offset_multiplier).unwrap();
 
         assert_eq!(offset, self.writer.offset);
