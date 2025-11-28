@@ -1,4 +1,4 @@
-use bumpalo::{collections, Bump};
+use bumpalo::{Bump, collections};
 use camino::Utf8PathBuf;
 use itertools::Itertools;
 use shin_versions::RomVersion;
@@ -11,7 +11,7 @@ use crate::{
         visit::{DirVisitor, FsWalker},
     },
     header::{RomHeader, RomHeaderV1, RomHeaderV2},
-    index::{RawEntry, DIRECTORY_OFFSET_MULTIPLIER},
+    index::{DIRECTORY_OFFSET_MULTIPLIER, RawEntry},
 };
 
 #[derive(Default)]
@@ -100,8 +100,8 @@ impl<'a, 'bump, S> FsWalker<'bump, S> for AllocateDirectoryVisitor<'a, 'bump> {
 
         let my_offset = alloc.allocate(4 + entries_size as u64);
 
-        alloc.allocate(2); // "." entry file name
-        alloc.allocate(3); // ".." entry file name
+        alloc.allocate(2); // b".\x00" entry file name
+        alloc.allocate(3); // b"..\x00" entry file name
 
         for entry in &directory.0 {
             alloc.allocate(entry.encoded_name.len() as u64);

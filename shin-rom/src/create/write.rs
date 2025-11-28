@@ -1,7 +1,7 @@
 use std::io;
 
-use binrw::{io::NoSeek, BinResult, BinWrite};
-use bumpalo::{collections, Bump};
+use binrw::{BinResult, BinWrite, io::NoSeek};
+use bumpalo::{Bump, collections};
 use camino::Utf8PathBuf;
 use shin_versions::{RomDirectoryOffsetDisposition, RomVersion};
 use tracing::trace;
@@ -14,7 +14,7 @@ use crate::{
         visit::{DirVisitor, FsWalker},
     },
     default_spinner_span,
-    index::{NameOffsetAndFlags, RawEntry, DIRECTORY_OFFSET_MULTIPLIER},
+    index::{DIRECTORY_OFFSET_MULTIPLIER, NameOffsetAndFlags, RawEntry},
     progress::{RomCounter, RomProgress},
 };
 
@@ -41,6 +41,8 @@ impl<W: io::Write> WriteWrapper<W> {
     pub fn align(&mut self, alignment: u64) -> io::Result<()> {
         use std::io::Write;
 
+        // FIXME: this will add padding if the input is already padded correctly
+        // Do we want to do this?
         let delta = self.offset.next_multiple_of(alignment) - self.offset;
         for _ in 0..delta {
             self.write_all(&[0])?;
@@ -208,10 +210,10 @@ where
         };
 
         // emit "." and ".." entries (they are always at the beginning)
-        visitor.emit_entry(".", b".", true, current_directory_position);
+        visitor.emit_entry(".", b".\x00", true, current_directory_position);
         let parent_index = self.directory_parent_indices[index];
         let parent_directory_position = self.directory_positions[parent_index];
-        visitor.emit_entry("..", b"..", true, parent_directory_position);
+        visitor.emit_entry("..", b"..\x00", true, parent_directory_position);
 
         visit::visit_directory(
             directory,
@@ -227,6 +229,11 @@ where
 
             self.writer.write_all(name).expect("Failed to write name");
         }
+
+        assert_eq!(
+            current_directory_position.0 + current_directory_position.1,
+            self.writer.offset
+        );
     }
 }
 
