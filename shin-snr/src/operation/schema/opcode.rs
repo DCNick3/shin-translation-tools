@@ -1,16 +1,11 @@
-mod dispatch;
-mod react;
+use std::fmt;
 
-pub use dispatch::decode_instr;
-pub use react::react_instr;
+use enum_map::Enum;
+use shin_versions::{StringArrayKind, StringKind};
 
-// we break the rust naming rules in order to
-// 1. match game's COMMAND names
-// 2. distinguish instructions (lowercase) from commands (UPPERCASE)
-#[allow(non_camel_case_types, clippy::upper_case_acronyms)]
-#[derive(Debug, Copy, Clone)]
+#[derive(Debug, Copy, Clone, Eq, PartialEq, Enum)]
+#[allow(non_camel_case_types)]
 pub enum Instruction {
-    // Instructions
     // they do not affect the game state and are internal to the VM
     // these do not seem to change between versions
     // NOTE: not all implemented opcodes are implemented here, because I am lazy
@@ -36,26 +31,29 @@ pub enum Instruction {
     retsub,
     /// Jump table
     jt,
-    pop,
     /// Call subroutine table
     gosubt,
     rnd,
     push,
+    pop,
     /// Call function
     call,
     /// Return from function
     r#return,
     /// Inverted get table (index of matching entry in table)
-    igt,
-
+    fmt,
+    /// Name is a placeholder, never encountered yet
+    fnmt,
     /// Get the character ID corresponding to the passed Bustup info
     getbupid,
-
+}
+#[derive(Debug, Copy, Clone, Eq, PartialEq, Enum)]
+#[allow(clippy::upper_case_acronyms)]
+pub enum Command {
     // Commands
     // they yield to the game loop and are what affects the game state
     // they can be interpreted differently in different contexts (e.g. running the ADV vs building the log)
     // they do tend to change between versions
-    // NOTE: I believe currently all Astral air opcodes are listed here
     EXIT,
     SGET,
     SSET,
@@ -187,4 +185,55 @@ pub enum Instruction {
 
     // this is the last thing in the opcode space
     DEBUGOUT,
+}
+
+impl TryFrom<Command> for StringKind {
+    type Error = ();
+
+    fn try_from(value: Command) -> Result<Self, Self::Error> {
+        use Command::*;
+
+        Ok(match value {
+            SAVEINFO => StringKind::Saveinfo,
+            SELECT => StringKind::Select,
+            MSGSET => StringKind::Msgset,
+            DEBUGOUT => StringKind::Dbgout,
+            LOGSET => StringKind::Logset,
+            VOICEPLAY => StringKind::Voiceplay,
+            // Game-specific string kinds
+            CHATSET => StringKind::Chatset,
+            // Alias Carnival
+            NAMED => StringKind::Named,
+            STAGEINFO => StringKind::Stageinfo,
+            _ => return Err(()),
+        })
+    }
+}
+
+impl TryFrom<Command> for StringArrayKind {
+    type Error = ();
+
+    fn try_from(value: Command) -> Result<Self, Self::Error> {
+        use Command::*;
+
+        Ok(match value {
+            SELECT => StringArrayKind::SelectChoice,
+            _ => return Err(()),
+        })
+    }
+}
+
+#[derive(Copy, Clone, Eq, PartialEq, Enum)]
+pub enum Opcode {
+    Instruction(Instruction),
+    Command(Command),
+}
+
+impl fmt::Debug for Opcode {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Opcode::Instruction(instr) => fmt::Debug::fmt(instr, f),
+            Opcode::Command(cmd) => fmt::Debug::fmt(cmd, f),
+        }
+    }
 }

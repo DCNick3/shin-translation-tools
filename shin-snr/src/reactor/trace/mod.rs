@@ -8,8 +8,12 @@ use shin_versions::{MessageCommandStyle, StringEncoding};
 pub use self::{console::ConsoleTraceListener, csv::CsvTraceListener};
 use crate::{
     layout::message_parser::MessageReflowMode,
+    operation::{
+        OperationElementRepr,
+        arena::OperationArena,
+        schema::{Opcode, OperationSchema},
+    },
     reactor::{AnyStringSource, Reactor, StringArraySource, StringSource},
-    reader::Reader,
     text::decode_zstring,
 };
 
@@ -17,9 +21,7 @@ pub trait StringTraceListener {
     fn on_string(&mut self, instr_offset: u32, source: AnyStringSource, s: &str);
 }
 
-pub struct StringTraceReactor<'a, L> {
-    reader: Reader<'a>,
-    current_instr_offset: u32,
+pub struct StringTraceReactor<L> {
     string_encoding: StringEncoding,
     snr_style: MessageCommandStyle,
     user_style: MessageCommandStyle,
@@ -27,17 +29,14 @@ pub struct StringTraceReactor<'a, L> {
     bump: Bump,
 }
 
-impl<'a, L> StringTraceReactor<'a, L> {
+impl<L: StringTraceListener> StringTraceReactor<L> {
     pub fn new(
-        reader: Reader<'a>,
         string_encoding: StringEncoding,
         snr_style: MessageCommandStyle,
         user_style: MessageCommandStyle,
         listener: L,
     ) -> Self {
         Self {
-            reader,
-            current_instr_offset: 0,
             string_encoding,
             snr_style,
             user_style,
@@ -45,144 +44,75 @@ impl<'a, L> StringTraceReactor<'a, L> {
             bump: Bump::new(),
         }
     }
-}
 
-fn on_string_impl<'bump, L: StringTraceListener>(
-    listener: &mut L,
-    bump: &'bump Bump,
-    string_encoding: StringEncoding,
-    snr_style: MessageCommandStyle,
-    user_style: MessageCommandStyle,
-    instr_offset: u32,
-    source: AnyStringSource,
-    s: &'bump [u8],
-) {
-    let snr_string = decode_zstring(bump, string_encoding, s, source.contains_commands()).unwrap();
-
-    let user_string = crate::layout::message_parser::transform_reflow(
-        bump,
-        snr_string,
-        snr_style,
-        MessageReflowMode::NoReflow,
-        user_style,
-        source,
-    );
-
-    listener.on_string(instr_offset, source, user_string)
-}
-
-fn on_string_array_impl<'bump, L: StringTraceListener>(
-    listener: &mut L,
-    bump: &'bump Bump,
-    string_encoding: StringEncoding,
-    snr_style: MessageCommandStyle,
-    user_style: MessageCommandStyle,
-    instr_offset: u32,
-    source: StringArraySource,
-    ss: &[u8],
-) {
-    for (i, s) in (0..).zip(StringArrayIter::new(ss)) {
-        on_string_impl(
-            listener,
-            bump,
-            string_encoding,
-            snr_style,
-            user_style,
-            instr_offset,
-            AnyStringSource::Array(source, i),
-            s,
-        )
-    }
-}
-
-impl<'a, L: StringTraceListener> Reactor for StringTraceReactor<'a, L> {
-    fn byte(&mut self) -> u8 {
-        self.reader.byte()
-    }
-
-    fn short(&mut self) -> u16 {
-        self.reader.short()
-    }
-
-    fn uint(&mut self) -> u32 {
-        self.reader.uint()
-    }
-
-    fn reg(&mut self) {
-        self.reader.reg();
-    }
-
-    fn offset(&mut self) {
-        self.reader.offset();
-    }
-
-    fn u8string(&mut self, source: StringSource) {
-        let s = self.reader.u8string();
-        on_string_impl(
-            &mut self.listener,
+    fn on_string_impl(&mut self, operation_position: u32, source: AnyStringSource, s: &[u8]) {
+        let snr_string = decode_zstring(
             &self.bump,
             self.string_encoding,
-            self.snr_style,
-            self.user_style,
-            self.current_instr_offset,
-            AnyStringSource::Singular(source),
             s,
+            source.contains_commands(),
         )
-    }
+        .unwrap();
 
-    fn u16string(&mut self, source: StringSource) {
-        let s = self.reader.u16string();
-        on_string_impl(
-            &mut self.listener,
+        let user_string = crate::layout::message_parser::transform_reflow(
             &self.bump,
-            self.string_encoding,
+            snr_string,
             self.snr_style,
+            MessageReflowMode::NoReflow,
             self.user_style,
-            self.current_instr_offset,
-            AnyStringSource::Singular(source),
-            s,
-        )
-    }
-
-    fn u8string_array(&mut self, source: StringArraySource) {
-        let ss = self.reader.u8string_array();
-        on_string_array_impl(
-            &mut self.listener,
-            &self.bump,
-            self.string_encoding,
-            self.snr_style,
-            self.user_style,
-            self.current_instr_offset,
             source,
-            ss,
-        )
-    }
+        );
 
-    fn u16string_array(&mut self, source: StringArraySource) {
-        let ss = self.reader.u16string_array();
-        on_string_array_impl(
-            &mut self.listener,
-            &self.bump,
-            self.string_encoding,
-            self.snr_style,
-            self.user_style,
-            self.current_instr_offset,
-            source,
-            ss,
-        )
+        self.listener
+            .on_string(operation_position, source, user_string)
     }
+}
 
-    fn instr_start(&mut self) {
+impl<L: StringTraceListener> Reactor for StringTraceReactor<L> {
+    fn react(
+        &mut self,
+        operation_position: u32,
+        _raw_opcode: u8,
+        opcode: Opcode,
+        op_schema: &OperationSchema,
+        arena: &OperationArena,
+    ) {
+        for element in arena.iter(&op_schema) {
+            match element {
+                OperationElementRepr::String(_, string) => {
+                    let Some(source) = StringSource::for_operation(opcode, op_schema, arena) else {
+                        panic!("Could not determine StringSource for opcode {:?}", opcode)
+                    };
+
+                    self.on_string_impl(
+                        operation_position,
+                        AnyStringSource::Singular(source),
+                        string,
+                    );
+                }
+                OperationElementRepr::StringArray(_, string_array) => {
+                    let Some(source) = StringArraySource::for_operation(opcode, op_schema, arena)
+                    else {
+                        panic!(
+                            "Could not determine StringArraySource for opcode {:?}",
+                            opcode
+                        )
+                    };
+
+                    for (i, string) in (0..).zip(StringArrayIter::new(string_array)) {
+                        self.on_string_impl(
+                            operation_position,
+                            AnyStringSource::Array(source, i),
+                            string,
+                        );
+                    }
+                }
+                _ => {
+                    // ignore
+                }
+            }
+        }
+
         self.bump.reset();
-        self.current_instr_offset = self.reader.position();
-    }
-    fn instr_end(&mut self) {}
-
-    fn has_instr(&self) -> bool {
-        self.reader.has_instr()
-    }
-
-    fn in_location(&self) -> u32 {
-        self.reader.position()
     }
 }

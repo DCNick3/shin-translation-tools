@@ -1,38 +1,39 @@
 use std::iter;
 
-use bumpalo::{collections::Vec, Bump};
+use bumpalo::{Bump, collections::Vec};
 use owo_colors::OwoColorize;
-use shin_text::{detect_fixup, encode_sjis_zstring, FixupDetectResult, StringArrayIter};
+use shin_text::{FixupDetectResult, StringArrayIter, detect_fixup, encode_sjis_zstring};
 use shin_versions::{MessageCommandStyle, StringPolicy};
 use unicode_width::UnicodeWidthChar as _;
 
 use crate::{
     layout::message_parser::MessageReflowMode,
+    operation::{
+        OperationElementRepr,
+        arena::OperationArena,
+        schema::{Opcode, OperationSchema},
+    },
     reactor::{AnyStringSource, Reactor, StringArraySource, StringSource},
-    reader::Reader,
     text::{decode_zstring, encode_utf8_zstring},
 };
 
-pub struct StringRoundtripValidatorReactor<'a> {
+pub struct StringRoundtripValidatorReactor {
     snr_style: MessageCommandStyle,
     user_style: MessageCommandStyle,
     policy: StringPolicy,
-    reader: Reader<'a>,
     bump: Bump,
 }
 
-impl<'a> StringRoundtripValidatorReactor<'a> {
+impl StringRoundtripValidatorReactor {
     pub fn new(
         snr_style: MessageCommandStyle,
         user_style: MessageCommandStyle,
         policy: StringPolicy,
-        reader: Reader<'a>,
     ) -> Self {
         Self {
             snr_style,
             user_style,
             policy,
-            reader,
             bump: Bump::new(),
         }
     }
@@ -138,176 +139,116 @@ fn validate_fixup_policy(decoded: &str, detection_map: &[FixupDetectResult], pol
     }
 }
 
-fn roundrip_string(
-    bump: &Bump,
-    s: &[u8],
-    snr_style: MessageCommandStyle,
-    user_style: MessageCommandStyle,
-    policy: StringPolicy,
-    source: AnyStringSource,
-) {
-    let decoded = decode_zstring(bump, policy.encoding(), s, source.contains_commands()).unwrap();
+impl StringRoundtripValidatorReactor {
+    fn roundtrip_string(&self, source: AnyStringSource, string: &[u8]) {
+        let decoded = decode_zstring(
+            &self.bump,
+            self.policy.encoding(),
+            string,
+            source.contains_commands(),
+        )
+        .unwrap();
 
-    if decoded.contains(|v| shin_text::UNFIXED_UP_CHARACTERS.contains(&v)) {
-        panic!(
-            "decoded string contains unfixed-up characters: {:?}",
-            decoded
+        if decoded.contains(|v| shin_text::UNFIXED_UP_CHARACTERS.contains(&v)) {
+            panic!(
+                "decoded string contains unfixed-up characters: {:?}",
+                decoded
+            );
+        }
+
+        // need to do two transforms to simulate what running a full roundtrip would do (from in_style into out_style and back)
+        // first transform into what the user would see
+        let user_transformed = crate::layout::message_parser::transform_reflow(
+            &self.bump,
+            decoded,
+            self.snr_style,
+            MessageReflowMode::NoReflow,
+            self.user_style,
+            source,
         );
-    }
 
-    // need to do two transforms to simulate what running a full roundtrip would do (from in_style into out_style and back)
-    // first transform into what the user would see
-    let user_transformed = crate::layout::message_parser::transform_reflow(
-        bump,
-        decoded,
-        snr_style,
-        MessageReflowMode::NoReflow,
-        user_style,
-        source,
-    );
+        match self.policy {
+            StringPolicy::ShiftJis(policy) => {
+                let mut fixup_map = Vec::with_capacity_in(string.len(), &self.bump);
+                detect_fixup(string, &mut fixup_map).unwrap();
 
-    match policy {
-        StringPolicy::ShiftJis(policy) => {
-            let mut fixup_map = Vec::with_capacity_in(s.len(), bump);
-            detect_fixup(s, &mut fixup_map).unwrap();
+                // and then transform back into what the game would see
+                let (game_transformed, fixup_policy) =
+                    crate::layout::message_parser::transform_reflow_and_infer_fixup_policy(
+                        &self.bump,
+                        user_transformed,
+                        self.user_style,
+                        MessageReflowMode::NoReflow,
+                        self.snr_style,
+                        policy,
+                        FixupDetectResult::merge_all(&fixup_map),
+                        source,
+                    );
+                validate_fixup_policy(game_transformed, fixup_map.as_slice(), fixup_policy);
+                assert_eq!(decoded, game_transformed);
 
-            // and then transform back into what the game would see
-            let (game_transformed, fixup_policy) =
-                crate::layout::message_parser::transform_reflow_and_infer_fixup_policy(
-                    bump,
+                let reencoded =
+                    encode_sjis_zstring(&self.bump, game_transformed, fixup_policy).unwrap();
+
+                if string != reencoded {
+                    format_mismatch(string, reencoded, decoded);
+                }
+            }
+            StringPolicy::Utf8 => {
+                let game_transformed = crate::layout::message_parser::transform_reflow(
+                    &self.bump,
                     user_transformed,
-                    user_style,
+                    self.user_style,
                     MessageReflowMode::NoReflow,
-                    snr_style,
-                    policy,
-                    FixupDetectResult::merge_all(&fixup_map),
+                    self.snr_style,
                     source,
                 );
-            validate_fixup_policy(game_transformed, fixup_map.as_slice(), fixup_policy);
-            assert_eq!(decoded, game_transformed);
 
-            let reencoded = encode_sjis_zstring(bump, game_transformed, fixup_policy).unwrap();
+                assert_eq!(decoded, game_transformed);
 
-            if s != reencoded {
-                format_mismatch(s, reencoded, decoded);
+                let reencoded = encode_utf8_zstring(&self.bump, game_transformed);
+
+                assert_eq!(string, reencoded);
             }
         }
-        StringPolicy::Utf8 => {
-            let game_transformed = crate::layout::message_parser::transform_reflow(
-                bump,
-                user_transformed,
-                user_style,
-                MessageReflowMode::NoReflow,
-                snr_style,
-                source,
-            );
+    }
+}
 
-            assert_eq!(decoded, game_transformed);
+impl<'a> Reactor for StringRoundtripValidatorReactor {
+    fn react(
+        &mut self,
+        _operation_position: u32,
+        _raw_opcode: u8,
+        opcode: Opcode,
+        op_schema: &OperationSchema,
+        arena: &OperationArena,
+    ) {
+        for element in arena.iter(&op_schema) {
+            match element {
+                OperationElementRepr::String(_, string) => {
+                    let Some(source) = StringSource::for_operation(opcode, op_schema, arena) else {
+                        panic!("Could not determine StringSource for opcode {:?}", opcode)
+                    };
 
-            let reencoded = encode_utf8_zstring(bump, game_transformed);
+                    self.roundtrip_string(AnyStringSource::Singular(source), string);
+                }
+                OperationElementRepr::StringArray(_, string_array) => {
+                    let Some(source) = StringArraySource::for_operation(opcode, op_schema, arena)
+                    else {
+                        panic!(
+                            "Could not determine StringArraySource for opcode {:?}",
+                            opcode
+                        )
+                    };
 
-            assert_eq!(s, reencoded);
+                    for (i, string) in (0..).zip(StringArrayIter::new(string_array)) {
+                        self.roundtrip_string(AnyStringSource::Array(source, i), string);
+                    }
+                }
+                _ => {
+                    // ignore
+                }
+            }
         }
-    }
-}
-
-fn roundrip_string_array(
-    bump: &Bump,
-    ss: &[u8],
-    snr_style: MessageCommandStyle,
-    user_style: MessageCommandStyle,
-    policy: StringPolicy,
-    source: StringArraySource,
-) {
-    for (i, s) in (0..).zip(StringArrayIter::new(ss)) {
-        roundrip_string(
-            bump,
-            s,
-            snr_style,
-            user_style,
-            policy,
-            AnyStringSource::Array(source, i),
-        );
-    }
-}
-
-impl<'a> Reactor for StringRoundtripValidatorReactor<'a> {
-    fn byte(&mut self) -> u8 {
-        self.reader.byte()
-    }
-
-    fn short(&mut self) -> u16 {
-        self.reader.short()
-    }
-
-    fn uint(&mut self) -> u32 {
-        self.reader.uint()
-    }
-
-    fn reg(&mut self) {
-        self.reader.reg();
-    }
-
-    fn offset(&mut self) {
-        self.reader.offset();
-    }
-
-    fn u8string(&mut self, source: StringSource) {
-        let s = self.reader.u8string();
-        roundrip_string(
-            &self.bump,
-            s,
-            self.snr_style,
-            self.user_style,
-            self.policy,
-            AnyStringSource::Singular(source),
-        )
-    }
-
-    fn u16string(&mut self, source: StringSource) {
-        let s = self.reader.u16string();
-        roundrip_string(
-            &self.bump,
-            s,
-            self.snr_style,
-            self.user_style,
-            self.policy,
-            AnyStringSource::Singular(source),
-        )
-    }
-
-    fn u8string_array(&mut self, source: StringArraySource) {
-        let ss = self.reader.u8string_array();
-        roundrip_string_array(
-            &self.bump,
-            ss,
-            self.snr_style,
-            self.user_style,
-            self.policy,
-            source,
-        )
-    }
-
-    fn u16string_array(&mut self, source: StringArraySource) {
-        let ss = self.reader.u16string_array();
-        roundrip_string_array(
-            &self.bump,
-            ss,
-            self.snr_style,
-            self.user_style,
-            self.policy,
-            source,
-        )
-    }
-
-    fn instr_start(&mut self) {}
-    fn instr_end(&mut self) {}
-
-    fn has_instr(&self) -> bool {
-        self.reader.has_instr()
-    }
-
-    fn in_location(&self) -> u32 {
-        self.reader.position()
     }
 }

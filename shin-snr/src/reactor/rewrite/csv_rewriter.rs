@@ -1,28 +1,13 @@
 use std::io;
 
 use bumpalo::Bump;
-use serde::{de, Deserialize};
+use serde::{Deserialize, de};
 use shin_versions::{AnyStringKind, MessageCommandStyle};
 
 use crate::{
     layout::message_parser::lint::diagnostics::LineReport,
-    reactor::{rewrite::StringRewriter, AnyStringSource, StringArraySource, StringSource},
+    reactor::{AnyStringSource, StringArraySource, StringSource, rewrite::StringRewriter},
 };
-
-#[derive(Deserialize)]
-#[serde(rename_all = "snake_case")]
-enum RawStringSource {
-    Saveinfo,
-    Select,
-    SelectChoice,
-    Msgset,
-    Dbgout,
-    Logset,
-    Voiceplay,
-    Chatset,
-    Named,
-    Stageinfo,
-}
 
 fn deser_hex<'de, D: serde::Deserializer<'de>>(deser: D) -> Result<u32, D::Error> {
     struct HexVisitor;
@@ -195,8 +180,14 @@ impl StringRewriter for CsvRewriter {
     ) -> Option<&'bump str> {
         // no entry -> no replacement
         let entry = self.entries[instr_index as usize].as_ref()?;
-        assert_eq!(entry.offset, instr_offset);
-        assert_eq!(entry.source, source);
+        assert_eq!(
+            entry.offset, instr_offset,
+            "Offset mismatch while matching CSV entry. Does the CSV file correspond to the SNR?"
+        );
+        assert_eq!(
+            entry.source, source,
+            "Source mismatch while matching CSV entry. Does the CSV file correspond to the SNR?"
+        );
 
         entry.get_effective_string(self.mode)
     }

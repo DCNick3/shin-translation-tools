@@ -1,6 +1,6 @@
 use std::{
     fs::File,
-    io::{BufWriter, Read, Seek, Write},
+    io::{BufWriter, Read, Write},
 };
 
 use camino::Utf8PathBuf;
@@ -8,11 +8,12 @@ use clap::{Args, Subcommand};
 use shin_font::FontMetrics;
 use shin_snr::{
     layout::{layouter::GameLayoutInfo, message_parser::MessageReflowMode},
-    react_with,
+    location_painter,
+    operation::schema::{ENGINE_SCHEMAS, EngineSchema},
     reactor::{
         dump_bin::DumpBinReactor,
-        location_painter::LocationPainterReactor,
         offset_validator::OffsetValidatorReactor,
+        react_with,
         rewrite::{
             CsvData, CsvRewriter, NoopRewriter, RewriteReactor, StringReplacementMode,
             StringRewriter,
@@ -69,7 +70,7 @@ impl CliMessageReflowMode {
         self,
         shin_version: ShinVersion,
         font: Option<&FontMetrics>,
-    ) -> MessageReflowMode {
+    ) -> MessageReflowMode<'_> {
         match self {
             CliMessageReflowMode::NoReflow => {
                 MessageReflowMode::NoReflow
@@ -174,17 +175,18 @@ fn rewrite_snr<'a, R, O>(
     snr_file: &[u8],
     reader: Reader,
     code_offset: u32,
+    schema: &EngineSchema,
     version: ShinVersion,
     user_style: MessageCommandStyle,
     reflow_mode: MessageReflowMode<'a>,
     rewriter: R,
-    mut output: &mut O,
+    output: &mut O,
 ) where
     R: StringRewriter,
-    O: Write + Seek,
+    O: Write,
 {
     let mut reactor = RewriteReactor::new(
-        reader,
+        version.number_style(),
         version.message_command_style(),
         user_style,
         reflow_mode,
@@ -192,53 +194,54 @@ fn rewrite_snr<'a, R, O>(
         rewriter,
         code_offset,
     );
-    react_with(&mut reactor, version);
+    react_with(reader.clone(), schema, &mut reactor);
 
-    let output_size = reactor.output_size().next_multiple_of(16);
+    let output_size = reactor.output_size();
+
+    assert!(output_size.is_multiple_of(16));
+
+    let mut output_buffer = Vec::new();
 
     // copy the magic
-    output
+    output_buffer
         .write_all(&snr_file[0..4])
         .expect("Writing to the output file failed");
     // re-write with the correct file sizes
     // even though some engine versions do not care about this fields, some absolutely do!
     // (for example, DC4)
-    output
+    output_buffer
         .write_all(&output_size.to_le_bytes())
         .expect("Writing to the output file failed");
     // copy the rest of the header
-    output
+    output_buffer
         .write_all(&snr_file[8..code_offset as usize])
         .expect("Writing to the output file failed");
 
     assert_eq!(
-        code_offset as u64,
+        code_offset,
         // this check requires Seek on the output
         // can we do it without Seek?
-        output.stream_position().unwrap(),
+        output_buffer.len() as u32,
         "Written header size does not match the expected size"
     );
 
-    let mut reactor = reactor.into_emit(&mut output);
-    react_with(&mut reactor, version);
+    let mut reactor = reactor.into_emit(output_buffer);
+    react_with(reader, schema, &mut reactor);
 
-    // align the file size to 16 bytes
-    let current_size = output
-        .stream_position()
-        .expect("Getting the current file size failed");
-    let padding = current_size.next_multiple_of(16) - current_size;
-    output
-        .write_all(&vec![0; padding as usize])
-        .expect("Writing to the output file failed");
+    let output_buffer = reactor.finish();
 
     assert_eq!(
-        output_size as u64,
-        output.stream_position().unwrap(),
+        output_size,
+        output_buffer.len() as u32,
         "Output file size does not match the expected size"
     );
+
+    output
+        .write_all(&output_buffer)
+        .expect("Writing to the output file failed")
 }
 
-fn bindiff_snr(shin_version: ShinVersion, snr1: &[u8], snr2: &[u8]) {
+fn bindiff_snr(schema: &EngineSchema, snr1: &[u8], snr2: &[u8]) {
     let code_offset1 = u32::from_le_bytes(snr1[0x20..0x24].try_into().unwrap());
     let code_offset2 = u32::from_le_bytes(snr2[0x20..0x24].try_into().unwrap());
 
@@ -262,13 +265,8 @@ fn bindiff_snr(shin_version: ShinVersion, snr1: &[u8], snr2: &[u8]) {
     let reader2 = Reader::new(snr2, code_offset);
 
     // get positions of instructions and offsets so that we can compare them easier
-    let mut reactor = LocationPainterReactor::new(reader1);
-    react_with(&mut reactor, shin_version);
-    let colors1 = reactor.finish();
-
-    let mut reactor = LocationPainterReactor::new(reader2);
-    react_with(&mut reactor, shin_version);
-    let colors2 = reactor.finish();
+    let colors1 = location_painter::paint_locations(reader1, schema);
+    let colors2 = location_painter::paint_locations(reader2, schema);
 
     for i in 0..std::cmp::min(colors1.len(), colors2.len()) {
         if colors1[i] != colors2[i] {
@@ -297,6 +295,8 @@ impl Command {
         let snr_file = std::fs::read(&common.snr_file).expect("Reading the SNR file failed");
         let version = common.engine_version;
 
+        let schema = &ENGINE_SCHEMAS[version];
+
         assert_eq!(&snr_file[0..4], b"SNR ", "SNR file magic mismatch");
         let code_offset = u32::from_le_bytes(snr_file[0x20..0x24].try_into().unwrap());
 
@@ -313,15 +313,15 @@ impl Command {
                 let encoding = version.string_encoding();
                 let snr_style = version.message_command_style();
                 let user_style = message_style.apply(snr_style);
+
                 let mut reactor = StringTraceReactor::new(
-                    reader,
                     encoding,
                     snr_style,
                     user_style,
                     CsvTraceListener::new(writer),
                 );
 
-                react_with(&mut reactor, version);
+                react_with(reader, schema, &mut reactor);
             }
             Command::ReadConsole {
                 common: _,
@@ -331,27 +331,22 @@ impl Command {
                 let snr_style = version.message_command_style();
                 let user_style = message_style.apply(snr_style);
 
-                let mut reactor = StringTraceReactor::new(
-                    reader,
-                    encoding,
-                    snr_style,
-                    user_style,
-                    ConsoleTraceListener,
-                );
+                let mut reactor =
+                    StringTraceReactor::new(encoding, snr_style, user_style, ConsoleTraceListener);
 
-                react_with(&mut reactor, version);
+                react_with(reader, schema, &mut reactor);
             }
             Command::ReadToBin { common: _, output } => {
                 let mut output = File::create(&output).expect("Opening the BIN file failed");
 
-                let mut reactor = DumpBinReactor::new(reader, &mut output);
+                let mut reactor = DumpBinReactor::new(&mut output);
 
-                react_with(&mut reactor, version);
+                react_with(reader, schema, &mut reactor);
             }
             Command::ReadValidateOffsets { common: _ } => {
-                let mut reactor = OffsetValidatorReactor::new(reader);
+                let mut reactor = OffsetValidatorReactor::new();
 
-                react_with(&mut reactor, version);
+                react_with(reader, schema, &mut reactor);
 
                 match reactor.validate() {
                     Ok(_) => {
@@ -377,10 +372,9 @@ impl Command {
                         snr_style,
                         user_style,
                         version.string_policy(),
-                        reader.clone(),
                     );
 
-                    react_with(&mut reactor, version);
+                    react_with(reader.clone(), schema, &mut reactor);
 
                     // 2. test SNR roundtrip
                     // NOTE: we have to pass in out_style to both NoopRewriter and RewriteReactor
@@ -396,6 +390,7 @@ impl Command {
                         &snr_file,
                         reader.clone(),
                         code_offset,
+                        schema,
                         version,
                         user_style,
                         MessageReflowMode::NoReflow,
@@ -416,7 +411,7 @@ impl Command {
                             path.display()
                         );
 
-                        bindiff_snr(version, snr_file.as_slice(), output.as_slice());
+                        bindiff_snr(schema, snr_file.as_slice(), output.as_slice());
                     }
                 }
 
@@ -492,6 +487,7 @@ impl Command {
                     &snr_file,
                     reader,
                     code_offset,
+                    schema,
                     version,
                     user_style,
                     reflow_mode,

@@ -67,7 +67,9 @@ fn decode_double_sjis_char(first: u8, second: u8) -> char {
     let addr = row * 94 + column;
 
     // SAFETY: addr < 11567, so it is safe to access the table
-    unsafe { *JIS_TABLE.get_unchecked(addr) }
+    // FIXME: not actually safe, since the table's size is 11468 < 11567 :/
+    // unsafe { *JIS_TABLE.get_unchecked(addr) }
+    JIS_TABLE[addr]
 }
 
 fn is_extended(c: u8) -> bool {

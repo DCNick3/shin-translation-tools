@@ -31,7 +31,7 @@ const FIXUP_KATAKANA_TABLE: [char; 64] = [
 
 // 11468 entries (122 rows * 94 columns)
 #[rustfmt::skip]
-static JIS_TABLE: &[char] = &[
+static JIS_TABLE: &[char; 11468] = &[
     // JIS X 0208 Row 1
     '\u{3000}', '、', '。', '，', '．', '・', '：', '；', '？', '！', '゛', '゜', '´', '｀', '¨',
     '＾', '￣', '＿', 'ヽ', 'ヾ', 'ゝ', 'ゞ', '〃', '仝', '々', '〆', '〇', 'ー', '―', '‐', '／',

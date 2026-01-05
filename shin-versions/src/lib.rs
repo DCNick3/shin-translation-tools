@@ -5,6 +5,7 @@
 // TODO: maybe generate this from a yaml file or whatnot
 
 use arrayref::array_ref;
+use enum_map::Enum;
 
 /// A version of the shin engine. It uniquely identifies all the file format versions, VM opcode numbers, etc.
 ///
@@ -15,7 +16,7 @@ use arrayref::array_ref;
 /// For Dramatic Create/FAVORITE it's based on the URL of the game's page on Dramatic Create's website, e.g. `https://dramaticcreate.com/WhiteEternity/` -> `WhiteEternity`
 ///
 /// When referring to these versions in the CLI, use `kebab-case` (e.g. `white-eternity`).
-#[derive(Debug, Copy, Clone, Ord, PartialOrd, Eq, PartialEq)]
+#[derive(Debug, Copy, Clone, Ord, PartialOrd, Eq, PartialEq, Enum)]
 #[cfg_attr(feature = "clap", derive(clap::ValueEnum))]
 pub enum ShinVersion {
     /// 2015-01-28 PSVita `PCSG00517`
@@ -39,12 +40,56 @@ pub enum ShinVersion {
     Gerokasu2,
 }
 
-/// Describes how `NumberSpec` is encoded in a particular version
+#[macro_use]
+mod verpat {
+    // this is false-positive: it is used by the macro
+    #[expect(unused_imports)]
+    use super::ShinVersion::*;
+    /// Pattern over a group of shin versions
+    ///
+    /// This macro allows us to define some pattern aliases
+    #[macro_export]
+    macro_rules! verpat {
+        (@pre-shin) => {
+            HigurashiSui | AliasCarnival
+        };
+        (@post-shin) => {
+            WhiteEternity | HigurashiHou | HigurashiHouV2 | DC4 | Konosuba | Umineko | Gerokasu2
+        };
+        (@post-plane) => {
+            DC4 | Umineko | Gerokasu2
+        };
+        (@higurashi) => {
+            HigurashiSui | HigurashiHou | HigurashiHouV2
+        };
+        (@not-konosuba) => {
+            HigurashiSui
+                | AliasCarnival
+                | WhiteEternity
+                | HigurashiHou
+                | HigurashiHouV2
+                | DC4
+                | Umineko
+                | Gerokasu2
+        };
+        (@vita) => {
+            HigurashiSui | AliasCarnival | WhiteEternity
+        };
+        (@switch) => {
+            HigurashiHou | HigurashiHouV2 | DC4 | Konosuba | Umineko | Gerokasu2
+        };
+        ($pattern:pat) => {
+            $pattern
+        };
+    }
+}
+
+/// Describes how `Number` is encoded in a particular version
 #[derive(Debug, Copy, Clone, Eq, PartialEq)]
-pub enum NumberSpecStyle {
-    /// `NumberSpec` is stored just as a `u16`. If it's smaller than `0x8000` (I think?) it is a literal, otherwise it is a register reference.
-    Short,
-    /// `NumberSpec` is encoded as a complicated variable-length encoding. See [https://github.com/DCNick3/shin/blob/4ddd24604c390d50db5191392187ed3ebec39a95/shin-core/src/format/scenario/instruction_elements/number_spec.rs#L38] for full decoding algorithm.
+pub enum NumberStyle {
+    /// `Number` is stored just as a `u16`. If it's smaller than `0x8000` (I think?) it is a literal, otherwise it is a register reference.
+    U16,
+    /// `Number` is encoded as a complicated variable-length encoding. See [https://github.com/DCNick3/shin/blob/4ddd24604c390d50db5191392187ed3ebec39a95/shin-core/src/format/scenario/instruction_elements/number_spec.rs#L38] for full decoding algorithm.
     VarInt,
 }
 
@@ -131,12 +176,12 @@ impl StringPolicy {
 }
 
 impl ShinVersion {
-    pub fn number_spec_style(&self) -> NumberSpecStyle {
-        use NumberSpecStyle::*;
+    pub fn number_style(&self) -> NumberStyle {
+        use NumberStyle::*;
         use ShinVersion::*;
 
         match self {
-            HigurashiSui | AliasCarnival | WhiteEternity => Short,
+            HigurashiSui | AliasCarnival | WhiteEternity => U16,
             HigurashiHou | HigurashiHouV2 | DC4 | Konosuba | Umineko | Gerokasu2 => VarInt,
         }
     }

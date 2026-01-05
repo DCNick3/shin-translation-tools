@@ -24,6 +24,8 @@ serde = "1.0.218"
 bumpalo = "3.14.0"
 camino = "1.1.6"
 
+enum-map = "3.0.0-beta.2"
+
 [profile.release]
 debug = true
 

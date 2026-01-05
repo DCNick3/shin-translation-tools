@@ -1,85 +1,59 @@
 use std::collections::HashSet;
 
 use crate::{
-    reactor::{Reactor, StringArraySource, StringSource},
-    reader::Reader,
+    operation::{
+        OperationElementRepr,
+        arena::OperationArena,
+        schema::{Opcode, OperationSchema},
+    },
+    reactor::Reactor,
 };
 
 // why do we need it, again?
-#[allow(dead_code)]
-pub struct OffsetValidatorReactor<'a> {
-    reader: Reader<'a>,
+pub struct OffsetValidatorReactor {
     referred_offsets: HashSet<u32>,
-    instruction_offsets: HashSet<u32>,
+    operation_offsets: HashSet<u32>,
 }
 
-impl<'a> OffsetValidatorReactor<'a> {
-    pub fn new(reader: Reader<'a>) -> Self {
+impl OffsetValidatorReactor {
+    pub fn new() -> Self {
         Self {
-            reader,
             referred_offsets: HashSet::new(),
-            instruction_offsets: HashSet::new(),
+            operation_offsets: HashSet::new(),
         }
     }
 }
 
-impl<'a> Reactor for OffsetValidatorReactor<'a> {
-    fn byte(&mut self) -> u8 {
-        self.reader.byte()
-    }
+impl Reactor for OffsetValidatorReactor {
+    fn react(
+        &mut self,
+        operation_position: u32,
+        _raw_opcode: u8,
+        _opcode: Opcode,
+        op_schema: &OperationSchema,
+        arena: &OperationArena,
+    ) {
+        self.operation_offsets.insert(operation_position);
 
-    fn short(&mut self) -> u16 {
-        self.reader.short()
-    }
-
-    fn uint(&mut self) -> u32 {
-        self.reader.uint()
-    }
-
-    fn reg(&mut self) {
-        self.reader.reg();
-    }
-
-    fn offset(&mut self) {
-        let offset = self.reader.offset();
-        self.referred_offsets.insert(offset);
-    }
-
-    fn u8string(&mut self, _source: StringSource) {
-        self.reader.u8string();
-    }
-
-    fn u16string(&mut self, _source: StringSource) {
-        self.reader.u16string();
-    }
-
-    fn u8string_array(&mut self, _source: StringArraySource) {
-        self.reader.u8string_array();
-    }
-
-    fn u16string_array(&mut self, _source: StringArraySource) {
-        self.reader.u16string_array();
-    }
-
-    fn instr_start(&mut self) {
-        self.instruction_offsets.insert(self.reader.position());
-    }
-    fn instr_end(&mut self) {}
-
-    fn has_instr(&self) -> bool {
-        self.reader.has_instr()
-    }
-
-    fn in_location(&self) -> u32 {
-        self.reader.position()
+        for element in arena.iter(op_schema) {
+            match element {
+                OperationElementRepr::Offset(offset) => {
+                    self.referred_offsets.insert(offset);
+                }
+                OperationElementRepr::OffsetArray(_, offsets) => {
+                    self.referred_offsets.extend(offsets);
+                }
+                _ => {}
+            }
+        }
     }
 }
 
-impl<'a> OffsetValidatorReactor<'a> {
+impl OffsetValidatorReactor {
     pub fn validate(self) -> Result<(), String> {
         let mut invalid_offsets = Vec::new();
         for offset in self.referred_offsets {
-            if !self.instruction_offsets.contains(&offset) {
+            if !self.operation_offsets.contains(&offset) {
                 invalid_offsets.push(offset);
             }
         }

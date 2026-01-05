@@ -1,4 +1,4 @@
-use bumpalo::{collections::Vec, Bump};
+use bumpalo::{Bump, collections::Vec};
 use shin_font::FontMetrics;
 use shin_versions::{MessageCommandStyle, ShinVersion};
 
@@ -437,7 +437,7 @@ pub(super) mod test {
         style: MessageCommandStyle,
         params: LightLayouterParams,
         message: &str,
-    ) -> Vec<Vec<Command>> {
+    ) -> Vec<Vec<Command<'_>>> {
         let mut tokens = Vec::new();
         message_parser::parse(style, message, &mut tokens);
 

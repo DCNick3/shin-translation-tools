@@ -1,9 +1,9 @@
 use shin_versions::ShinVersion;
 
-use crate::instruction::Instruction;
+use crate::operation::Instruction;
 
 pub fn decode_instr(version: ShinVersion, opcode: u8) -> Option<Instruction> {
-    use crate::instruction::Instruction::*;
+    use crate::operation::Instruction::*;
     // TODO: those can probably be smartly merged (need to gather some data first though)
     match version {
         ShinVersion::HigurashiSui => {
@@ -289,7 +289,7 @@ pub fn decode_instr(version: ShinVersion, opcode: u8) -> Option<Instruction> {
             0x4e => pop,         // 0x71000b8ffc
             0x4f => call,        // 0x71000b90d0
             0x50 => r#return,    // 0x71000b91a0
-            0x51 => igt,         // 0x71000b91dc
+            0x51 => fmt,         // 0x71000b91dc
             0x52 => todo!(),     // 0x71000b9300
             0x53 => todo!(),     // 0x71000b9424
             0x81 => SGET,        // 0x71000b94f4
@@ -449,7 +449,7 @@ pub fn decode_instr(version: ShinVersion, opcode: u8) -> Option<Instruction> {
             0x4e => pop,
             0x4f => call,
             0x50 => r#return,
-            0x51 => igt,
+            0x51 => fmt,
             // also present in umineko, but, thankfully, not used
             0x53 => getbupid,
             //
@@ -682,7 +682,7 @@ pub fn decode_instr(version: ShinVersion, opcode: u8) -> Option<Instruction> {
             0x4e => pop,      // 0x71000bf560
             0x4f => call,     // 0x71000bf630
             0x50 => r#return, // 0x71000bf6f8
-            0x51 => igt,      // 0x71000bf740
+            0x51 => fmt,      // 0x71000bf740
             // 0x52 => ins_0x52,  // 0x71000bf860
             // 0x53 => ins_0x53,  // 0x71000bf978
             0x81 => SGET,      // 0x71000bfa50

@@ -2,11 +2,11 @@ mod csv_rewriter;
 mod noop_rewriter;
 mod x_rewriter;
 
-use std::{collections::HashMap, io};
+use std::collections::HashMap;
 
-use bumpalo::{collections::Vec, Bump};
-use shin_text::{encode_sjis_zstring, FixupDetectResult, StringArrayIter};
-use shin_versions::{MessageCommandStyle, StringPolicy};
+use bumpalo::Bump;
+use shin_text::{FixupDetectResult, StringArrayIter, encode_sjis_zstring};
+use shin_versions::{MessageCommandStyle, NumberStyle, StringPolicy};
 
 pub use self::{
     csv_rewriter::{CsvData, CsvRewriter, StringReplacementMode},
@@ -15,9 +15,15 @@ pub use self::{
 };
 use crate::{
     layout::message_parser::MessageReflowMode,
+    operation::{
+        OperationElementRepr,
+        arena::OperationArena,
+        schema::{Opcode, OperationSchema},
+        serialize::InstructionSerializeContext,
+    },
     reactor::{AnyStringSource, Reactor, StringArraySource, StringSource},
-    reader::Reader,
     text::{decode_zstring, encode_utf8_zstring},
+    writer::{CountingWriter, RealWriter, Writer},
 };
 
 #[derive(Default)]
@@ -108,47 +114,71 @@ pub trait RewriteMode {
     fn instr_start(&mut self, in_offset: u32);
 }
 
+pub trait RewriteMode2 {
+    fn instr_start(&mut self, in_offset: u32, raw_opcode: u8);
+    fn put_element(&mut self, element: &OperationElementRepr);
+    fn end_of_stream(&mut self);
+}
+
 pub struct BuildOffsetMapMode {
     builder: OffsetMapBuilder,
-    initial_in_position: u32,
-    out_position: u32,
+    serializing: InstructionSerializeContext<CountingWriter>,
     instr_index: u32,
 }
 
-impl RewriteMode for BuildOffsetMapMode {
-    fn write(&mut self, data: &[u8]) {
-        self.out_position += data.len() as u32;
-    }
-
-    fn offset(&mut self, o: u32) {
-        self.write(&o.to_le_bytes());
-    }
-
-    fn instr_start(&mut self, in_offset: u32) {
+impl RewriteMode2 for BuildOffsetMapMode {
+    fn instr_start(&mut self, in_offset: u32, raw_opcode: u8) {
         let idx = self.instr_index;
         self.builder.orig_to_idx.insert(in_offset, idx);
-        self.builder.idx_to_out.insert(idx, self.out_position);
+        self.builder
+            .idx_to_out
+            .insert(idx, self.serializing.writer_mut().position());
+
+        self.serializing.put_u8(raw_opcode);
 
         self.instr_index += 1;
     }
+
+    fn put_element(&mut self, element: &OperationElementRepr) {
+        self.serializing.put_element(element);
+    }
+
+    fn end_of_stream(&mut self) {
+        self.serializing.writer_mut().pad_16();
+    }
 }
 
-pub struct EmitMode<W> {
+pub struct EmitMode {
     map: OffsetMap,
-    writer: W,
+    serializing: InstructionSerializeContext<RealWriter>,
 }
 
-impl<W: io::Write> RewriteMode for EmitMode<W> {
-    fn write(&mut self, data: &[u8]) {
-        self.writer.write_all(data).unwrap()
+impl RewriteMode2 for EmitMode {
+    fn instr_start(&mut self, _in_offset: u32, raw_opcode: u8) {
+        self.serializing.put_u8(raw_opcode);
     }
 
-    fn offset(&mut self, o: u32) {
-        let mapped = self.map.get(o).expect("offset not found in map. this is either a shin-tl bug, or the SNR has an offset that points in a middle of an instruction.");
-        self.write(&mapped.to_le_bytes());
+    fn put_element(&mut self, element: &OperationElementRepr) {
+        match element {
+            &OperationElementRepr::Offset(value) => {
+                let mapped = self.map.get(value).expect("offset not found in map. this is either a shin-tl bug, or the SNR has an offset that points in a middle of an instruction.");
+                self.serializing.put_offset(mapped);
+            }
+            &OperationElementRepr::OffsetArray(kind, values) => {
+                self.serializing.put_length(kind, values.len());
+                for &value in values {
+                    let mapped = self.map.get(value).expect("offset not found in map. this is either a shin-tl bug, or the SNR has an offset that points in a middle of an instruction.");
+                    self.serializing.put_offset(mapped);
+                }
+            }
+
+            another => self.serializing.put_element(another),
+        }
     }
 
-    fn instr_start(&mut self, _in_offset: u32) {}
+    fn end_of_stream(&mut self) {
+        self.serializing.writer_mut().pad_16();
+    }
 }
 
 struct Stringer<'a, R> {
@@ -263,16 +293,9 @@ struct Position {
     current_instr_offset: u32,
 }
 
-pub struct RewriteReactor<'a, R, M> {
-    reader: Reader<'a>,
-    position: Position,
-    stringer: Stringer<'a, R>,
-    mode: M,
-}
-
 impl<'a, R> RewriteReactor<'a, R, BuildOffsetMapMode> {
     pub fn new(
-        reader: Reader<'a>,
+        number_style: NumberStyle,
         snr_style: MessageCommandStyle,
         user_style: MessageCommandStyle,
         reflow_mode: MessageReflowMode<'a>,
@@ -280,15 +303,15 @@ impl<'a, R> RewriteReactor<'a, R, BuildOffsetMapMode> {
         rewriter: R,
         initial_out_position: u32,
     ) -> Self {
-        let initial_in_position = reader.position();
         Self {
-            reader,
             position: Default::default(),
             stringer: Stringer::new(snr_style, user_style, reflow_mode, policy, rewriter),
             mode: BuildOffsetMapMode {
                 builder: OffsetMapBuilder::new(),
-                initial_in_position,
-                out_position: initial_out_position,
+                serializing: InstructionSerializeContext::new(
+                    number_style,
+                    CountingWriter::new(initial_out_position),
+                ),
                 instr_index: 0,
             },
         }
@@ -296,120 +319,100 @@ impl<'a, R> RewriteReactor<'a, R, BuildOffsetMapMode> {
 
     // TODO: we can get size of non-reacted rewriter. Need one more typestate?
     pub fn output_size(&self) -> u32 {
-        self.mode.out_position
+        self.mode.serializing.writer_ref().position()
     }
 
-    pub fn into_emit<W>(self, writer: W) -> RewriteReactor<'a, R, EmitMode<W>> {
+    pub fn into_emit(self, buffer: Vec<u8>) -> RewriteReactor<'a, R, EmitMode> {
+        let (number_style, _) = self.mode.serializing.into_parts();
+
         RewriteReactor {
-            reader: self.reader.rewind(self.mode.initial_in_position),
             position: Default::default(),
             stringer: self.stringer.reset(),
             mode: EmitMode {
                 map: self.mode.builder.build(),
-                writer,
+                serializing: InstructionSerializeContext::new(
+                    number_style,
+                    RealWriter::new(buffer),
+                ),
             },
         }
     }
 }
 
-impl<'a, R: StringRewriter, M: RewriteMode> RewriteReactor<'a, R, M> {}
+impl<'a, R> RewriteReactor<'a, R, EmitMode> {
+    pub fn finish(self) -> Vec<u8> {
+        let (_, writer) = self.mode.serializing.into_parts();
 
-impl<'a, R: StringRewriter, M: RewriteMode> Reactor for RewriteReactor<'a, R, M> {
-    fn byte(&mut self) -> u8 {
-        self.mode.byte(self.reader.byte())
+        writer.into_buffer()
     }
+}
 
-    fn short(&mut self) -> u16 {
-        self.mode.short(self.reader.short())
-    }
+pub struct RewriteReactor<'a, R, M> {
+    position: Position,
+    stringer: Stringer<'a, R>,
+    mode: M,
+}
 
-    fn uint(&mut self) -> u32 {
-        self.mode.uint(self.reader.uint())
-    }
+impl<'a, R: StringRewriter, M: RewriteMode2> Reactor for RewriteReactor<'a, R, M> {
+    fn react(
+        &mut self,
+        operation_position: u32,
+        raw_opcode: u8,
+        opcode: Opcode,
+        op_schema: &OperationSchema,
+        arena: &OperationArena,
+    ) {
+        self.position.current_instr_offset = operation_position;
 
-    fn reg(&mut self) {
-        self.mode.reg(self.reader.reg())
-    }
+        self.mode.instr_start(operation_position, raw_opcode);
 
-    fn offset(&mut self) {
-        self.mode.offset(self.reader.offset())
-    }
+        for element in arena.iter(&op_schema) {
+            match element {
+                OperationElementRepr::String(kind, string) => {
+                    let Some(source) = StringSource::for_operation(opcode, op_schema, arena) else {
+                        panic!("Could not determine StringSource for opcode {:?}", opcode)
+                    };
 
-    fn u8string(&mut self, source: StringSource) {
-        let s = self.reader.u8string();
+                    let rewritten = self.stringer.rewrite_string(
+                        &mut self.position,
+                        string,
+                        AnyStringSource::Singular(source),
+                    );
 
-        // TODO: possible optimization: we don't have to actually encode the string during the map building phase
-        // we only care about the size of the string and we have measure_sjis_string for that
+                    self.mode
+                        .put_element(&OperationElementRepr::String(kind, rewritten))
+                }
+                OperationElementRepr::StringArray(kind, string_array) => {
+                    let Some(source) = StringArraySource::for_operation(opcode, op_schema, arena)
+                    else {
+                        panic!(
+                            "Could not determine StringArraySource for opcode {:?}",
+                            opcode
+                        )
+                    };
 
-        let s =
-            self.stringer
-                .rewrite_string(&mut self.position, s, AnyStringSource::Singular(source));
+                    let mut rewritten = bumpalo::collections::Vec::new_in(&self.stringer.bump);
+                    for (i, s) in (0..).zip(StringArrayIter::new(string_array)) {
+                        let s = self.stringer.rewrite_string(
+                            &mut self.position,
+                            s,
+                            AnyStringSource::Array(source, i),
+                        );
+                        rewritten.extend_from_slice(s);
+                    }
+                    rewritten.push(0);
 
-        self.mode.byte(s.len() as u8);
-        self.mode.write(s);
-    }
-
-    fn u16string(&mut self, source: StringSource) {
-        let s = self.reader.u16string();
-
-        let s =
-            self.stringer
-                .rewrite_string(&mut self.position, s, AnyStringSource::Singular(source));
-
-        self.mode.short(s.len() as u16);
-        self.mode.write(s);
-    }
-
-    fn u8string_array(&mut self, source: StringArraySource) {
-        let ss = self.reader.u8string_array();
-
-        let mut res = Vec::new_in(&self.stringer.bump);
-        for (i, s) in (0..).zip(StringArrayIter::new(ss)) {
-            let s = self.stringer.rewrite_string(
-                &mut self.position,
-                s,
-                AnyStringSource::Array(source, i),
-            );
-            res.extend_from_slice(s);
+                    self.mode
+                        .put_element(&OperationElementRepr::StringArray(kind, &rewritten))
+                }
+                element => self.mode.put_element(&element),
+            }
         }
-        res.push(0);
 
-        self.mode.byte(res.len() as u8);
-        self.mode.write(res.as_slice());
-    }
-
-    fn u16string_array(&mut self, source: StringArraySource) {
-        let ss = self.reader.u16string_array();
-
-        let mut res = Vec::new_in(&self.stringer.bump);
-        for (i, s) in (0..).zip(StringArrayIter::new(ss)) {
-            let s = self.stringer.rewrite_string(
-                &mut self.position,
-                s,
-                AnyStringSource::Array(source, i),
-            );
-            res.extend_from_slice(s);
-        }
-        res.push(0);
-
-        self.mode.short(res.len() as u16);
-        self.mode.write(res.as_slice());
-    }
-
-    fn instr_start(&mut self) {
-        self.position.current_instr_offset = self.reader.position();
-        self.mode.instr_start(self.reader.position());
-    }
-
-    fn instr_end(&mut self) {
         self.position.current_instr_index += 1;
     }
 
-    fn has_instr(&self) -> bool {
-        self.reader.has_instr()
-    }
-
-    fn in_location(&self) -> u32 {
-        self.reader.position()
+    fn end_of_stream(&mut self) {
+        self.mode.end_of_stream()
     }
 }

@@ -1,34 +1,60 @@
 use shin_versions::{AnyStringKind, StringArrayKind, StringKind};
 
+use crate::{
+    operation::{
+        OperationElementRepr,
+        arena::OperationArena,
+        schema::{Command, EngineSchema, Opcode, OperationSchema},
+    },
+    reader::Reader,
+};
+
 pub mod dump_bin;
-pub mod location_painter;
 pub mod offset_validator;
 pub mod rewrite;
 pub mod string_roundrip_validator;
 pub mod trace;
 
 pub trait Reactor {
-    /// A single byte
-    fn byte(&mut self) -> u8;
-    /// A 2-byte short
-    fn short(&mut self) -> u16;
-    /// A 4-byte uint
-    fn uint(&mut self) -> u32;
-    /// A 2-byte register
-    fn reg(&mut self);
-    /// A 4-byte jump offset into the snr file
-    fn offset(&mut self);
-    fn u8string(&mut self, source: StringSource);
-    fn u16string(&mut self, source: StringSource);
-    fn u8string_array(&mut self, source: StringArraySource);
-    fn u16string_array(&mut self, source: StringArraySource);
+    fn react(
+        &mut self,
+        operation_position: u32,
+        raw_opcode: u8,
+        opcode: Opcode,
+        op_schema: &OperationSchema,
+        arena: &OperationArena,
+    );
+    fn end_of_stream(&mut self) {}
+}
 
-    fn instr_start(&mut self);
-    fn instr_end(&mut self);
+pub fn react_with<R: Reactor>(mut reader: Reader, schema: &EngineSchema, reactor: &mut R) {
+    let mut arena = OperationArena::new();
 
-    fn has_instr(&self) -> bool;
+    while reader.has_instr() {
+        let operation_position = reader.position();
+        let raw_opcode = reader.take_u8();
 
-    fn in_location(&self) -> u32;
+        let Some(opcode) = schema.lookup_opcode(raw_opcode) else {
+            panic!(
+                "Undefined opcode: {:?} @ 0x{:08x}",
+                raw_opcode, operation_position
+            );
+        };
+        let Some(op_schema) = schema.lookup_operation(opcode) else {
+            panic!(
+                "Opcode with undefined schema: {:?} @ 0x{:08x}",
+                opcode, operation_position
+            );
+        };
+
+        // eprintln!("{:08x} {:?}", operation_position, opcode);
+
+        op_schema.parse(schema.number_style(), &mut reader, &mut arena);
+
+        reactor.react(operation_position, raw_opcode, opcode, &op_schema, &arena);
+    }
+
+    reactor.end_of_stream();
 }
 
 #[derive(Debug, Copy, Clone, Eq, PartialEq)]
@@ -47,7 +73,7 @@ impl AnyStringSource {
 
     pub fn subindex(&self) -> u32 {
         match self {
-            AnyStringSource::Singular(s) => s.subindex2(),
+            AnyStringSource::Singular(s) => s.subindex(),
             &AnyStringSource::Array(_, i) => i,
         }
     }
@@ -84,6 +110,40 @@ pub enum StringSource {
 }
 
 impl StringSource {
+    pub fn for_operation(
+        opcode: Opcode,
+        op_schema: &OperationSchema,
+        arena: &OperationArena,
+    ) -> Option<Self> {
+        match opcode {
+            Opcode::Instruction(_) => None,
+            Opcode::Command(cmd) => match cmd {
+                Command::SAVEINFO => Some(StringSource::Saveinfo),
+                Command::SELECT => Some(StringSource::Select),
+                Command::MSGSET => {
+                    let OperationElementRepr::U32(first_argument) = arena
+                        .iter(op_schema)
+                        .next()
+                        .expect("Expected MSGSET to have at least one element")
+                    else {
+                        panic!("Expected the first MSGSET element to be u32");
+                    };
+                    // the lower 24-bit are the message id
+                    // the top 8 bits are some other thing
+                    Some(StringSource::Msgset(first_argument & 0xffffff))
+                }
+                Command::DEBUGOUT => Some(StringSource::Dbgout),
+                Command::LOGSET => Some(StringSource::Logset),
+                Command::VOICEPLAY => Some(StringSource::Voiceplay),
+                Command::CHATSET => Some(StringSource::Chatset),
+                Command::NAMED => Some(StringSource::Named),
+                Command::STAGEINFO => Some(StringSource::Stageinfo),
+
+                _ => None,
+            },
+        }
+    }
+
     pub fn from_kind(kind: StringKind, subindex: u32) -> Self {
         match kind {
             StringKind::Saveinfo => StringSource::Saveinfo,
@@ -112,7 +172,7 @@ impl StringSource {
         }
     }
 
-    pub fn subindex2(&self) -> u32 {
+    pub fn subindex(&self) -> u32 {
         match *self {
             StringSource::Saveinfo => 0,
             StringSource::Select => 0,
@@ -147,6 +207,19 @@ pub enum StringArraySource {
 }
 
 impl StringArraySource {
+    pub fn for_operation(
+        opcode: Opcode,
+        _op_schema: &OperationSchema,
+        _arena: &OperationArena,
+    ) -> Option<Self> {
+        match opcode {
+            Opcode::Instruction(_) => None,
+            Opcode::Command(cmd) => match cmd {
+                Command::SELECT => Some(StringArraySource::Select),
+                _ => None,
+            },
+        }
+    }
     pub fn from_kind(kind: StringArrayKind) -> Self {
         match kind {
             StringArrayKind::SelectChoice => StringArraySource::Select,
