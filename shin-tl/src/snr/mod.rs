@@ -416,8 +416,9 @@ impl Command {
                 }
 
                 // test the layouter against the provided layout dump (if present)
-                // TODO: use let chains here
-                if let (Some(font_file), Some(layout_dump_file)) = (font_file, layout_dump_file) {
+                if let Some(font_file) = font_file
+                    && let Some(layout_dump_file) = layout_dump_file
+                {
                     let mut decoder = ruzstd::decoding::StreamingDecoder::new(
                         File::open(&layout_dump_file).expect("Failed to read layout dump file"),
                     )

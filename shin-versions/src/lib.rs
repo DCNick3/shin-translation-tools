@@ -347,6 +347,7 @@ impl ShinVersion {
                 fixup_command_arguments: true,
                 // in reality, some character names are fixed up, while others are not :/
                 // the "ー" in "レポーター" is not fixed up, while the "ー" in "イェアソムール" is
+                // this means that we won't be able to reconstruct 1:1 file after a roundtrip
                 fixup_character_names: false,
             }),
             DC4 => StringPolicy::ShiftJis(SjisMessageFixupPolicy {
