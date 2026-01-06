@@ -171,6 +171,89 @@ pub const fn get_opcode_name(version: ShinVersion, opcode: u8) -> Option<Opcode>
                 _ => return None,
             })
         }),
+        ShinVersion::WorldRe => Some(if opcode < 0x80 {
+            // ===
+            // Instructions
+            Opcode::Instruction(match opcode {
+                0x40 => uo,     // 0x8103a6ff
+                0x41 => bo,     // 0x8103a7bf
+                0x42 => exp,    // 0x8103a8ef
+                0x43 => mm,     // 0x8103ac8d
+                0x44 => gt,     // 0x8103acfd
+                0x45 => st,     // 0x8103adb7
+                0x46 => jc,     // 0x8103ae73
+                0x47 => j,      // 0x8103af69
+                0x48 => gosub,  // 0x8103af85
+                0x49 => retsub, // 0x8103afb7
+                0x4a => jt,     // 0x8103afcf
+                0x4b => gosubt, // 0x8103b039
+                0x4c => rnd,    // 0x8103b0b7
+                0x4d => push,   // 0x8103b155
+                0x4e => pop,    // 0x8103b1c3
+                _ => return None,
+            })
+        } else {
+            // ===
+            // Commands
+            Opcode::Command(match opcode {
+                0x80 => EXIT,      // 0x8103b225
+                0x81 => SGET,      // 0x8103b289
+                0x82 => SSET,      // 0x8103b303
+                0x83 => WAIT,      // 0x8103b38d
+                0x84 => KEYWAIT,   // 0x8103b3f1
+                0x85 => MSGINIT,   // 0x8103b455
+                0x86 => MSGSET,    // 0x8103b4df
+                0x87 => MSGWAIT,   // 0x8103b5f5
+                0x88 => MSGSIGNAL, // 0x8103b659
+                0x89 => MSGCLOSE,  // 0x8103b689
+                0x8a => MSGCHECK,  // 0x8103b6b9
+                0x8b => LOGSET,    // 0x8103b70b
+                0x8c => SELECT,    // 0x8103b7f1
+                0x8d => WIPE,      // 0x8103b917
+                0x8e => WIPEWAIT,  // 0x8103baa7
+
+                0x90 => BGMPLAY,   // 0x8103bad7
+                0x91 => BGMSTOP,   // 0x8103bbd5
+                0x92 => BGMVOL,    // 0x8103bc39
+                0x93 => BGMWAIT,   // 0x8103bcdd
+                0x94 => BGMSYNC,   // 0x8103bd41
+                0x95 => SEPLAY,    // 0x8103bda5
+                0x96 => SESTOP,    // 0x8103bed1
+                0x97 => SESTOPALL, // 0x8103bf5b
+                0x98 => SEVOL,     // 0x8103bfbf
+                0x99 => SEWAIT,    // 0x8103c08f
+                0x9a => SEONCE,    // 0x8103c119
+                0x9b => UNK9B,     // 0x8103c1e9
+                0xa0 => SAVEINFO,  // 0x8103c273
+                0xa1 => MOVIE,     // 0x8103c2fd
+                0xa2 => EVBEGIN,   // 0x8103c361
+                0xa3 => EVEND,     // 0x8103c3c5
+
+                0xa5 => AUTOSAVE,  // 0x8103c3f7
+                0xa6 => VOICEPLAY, // 0x8103c429
+                0xa7 => VOICEWAIT, // 0x8103c501
+                0xaa => TIPSGET,   // 0x8103c567
+                0xac => CHARSEL,   // 0x8103c603
+                0xad => OTSUGET,   // 0x8103c69d
+
+                0xb0 => TROPHY, // 0x8103c703
+
+                0xc0 => LAYERCLEAR, // 0x8103c769
+                0xc1 => LAYERLOAD,  // 0x8103c79b
+                0xc2 => LAYERCTRL,  // 0x8103c897
+                0xc3 => LAYERWAIT,  // 0x8103c973
+                0xc4 => CHARCLEAR,  // 0x8103c9ff
+                0xc6 => CHARCTRL,   // 0x8103ca31
+                0xc7 => CHARWAIT,   // 0x8103cb0d
+                0xc8 => CHARDISP,   // 0x8103cb99
+                0xc9 => CHARSET,    // 0x8103cc2d
+                0xca => CHARDEL,    // 0x8103cf21
+                0xcb => CHARRGB,    // 0x8103cfad
+                0xcc => CHARMARK,   // 0x8103d065
+                0xcd => CHARFUKI,   // 0x8103d11d
+                _ => return None,
+            })
+        }),
         ShinVersion::WhiteEternity => Some(if opcode != 0 && opcode < 0x80 {
             // ===
             // Instructions

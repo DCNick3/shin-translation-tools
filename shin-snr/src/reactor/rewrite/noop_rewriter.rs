@@ -3,7 +3,7 @@ use shin_versions::MessageCommandStyle;
 
 use crate::{
     layout::message_parser::MessageReflowMode,
-    reactor::{rewrite::StringRewriter, AnyStringSource},
+    reactor::{AnyStringSource, rewrite::StringRewriter},
 };
 
 /// Exercises the string encoder and decoder, but does not actually rewrite strings.
@@ -36,6 +36,7 @@ impl StringRewriter for NoopRewriter {
             self.snr_style,
             MessageReflowMode::NoReflow,
             self.user_style,
+            false,
             source,
         );
 

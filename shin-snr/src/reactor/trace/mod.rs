@@ -25,6 +25,7 @@ pub struct StringTraceReactor<L> {
     string_encoding: StringEncoding,
     snr_style: MessageCommandStyle,
     user_style: MessageCommandStyle,
+    has_useless_escapes: bool,
     listener: L,
     bump: Bump,
 }
@@ -34,12 +35,14 @@ impl<L: StringTraceListener> StringTraceReactor<L> {
         string_encoding: StringEncoding,
         snr_style: MessageCommandStyle,
         user_style: MessageCommandStyle,
+        has_useless_escapes: bool,
         listener: L,
     ) -> Self {
         Self {
             string_encoding,
             snr_style,
             user_style,
+            has_useless_escapes,
             listener,
             bump: Bump::new(),
         }
@@ -60,6 +63,7 @@ impl<L: StringTraceListener> StringTraceReactor<L> {
             self.snr_style,
             MessageReflowMode::NoReflow,
             self.user_style,
+            self.has_useless_escapes,
             source,
         );
 

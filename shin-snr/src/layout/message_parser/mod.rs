@@ -4,8 +4,9 @@ pub mod sink;
 use std::str::CharIndices;
 
 use bumpalo::{
+    Bump,
     collections::{String, Vec},
-    vec, Bump,
+    vec,
 };
 use shin_font::FontMetrics;
 use shin_text::FixupDetectResult;
@@ -470,6 +471,7 @@ pub fn transform_reflow_and_infer_fixup_policy<'bump>(
     in_style: MessageCommandStyle,
     reflow: MessageReflowMode,
     out_style: MessageCommandStyle,
+    has_useless_escapes: bool,
     message_policy: SjisMessageFixupPolicy,
     detected: FixupDetectResult,
     source: AnyStringSource,
@@ -504,9 +506,13 @@ pub fn transform_reflow_and_infer_fixup_policy<'bump>(
             )
         };
 
-        if in_style == out_style {
-            // just a sanity check
-            assert_eq!(serialized_string, decoded);
+        if in_style == out_style
+            && let MessageReflowMode::NoReflow = reflow
+        {
+            if !has_useless_escapes {
+                // just a sanity check
+                assert_eq!(serialized_string, decoded);
+            }
         }
 
         (serialized_string, fixup_policy)
@@ -525,6 +531,7 @@ pub fn transform_reflow<'bump>(
     in_style: MessageCommandStyle,
     reflow: MessageReflowMode,
     out_style: MessageCommandStyle,
+    has_useless_escapes: bool,
     source: AnyStringSource,
 ) -> &'bump str {
     if source.contains_commands() {
@@ -540,9 +547,15 @@ pub fn transform_reflow<'bump>(
         }
 
         let serialized_string = serialize_string(bump, out_style, &tokens);
+
         if in_style == out_style {
-            // just a sanity check
-            assert_eq!(serialized_string, decoded);
+            // WorldRe has a string with needless escapes, triggering this assert
+            // This is the problematic string: `r　両目を見開き、こんな感じの顔をした→!(!？Д!？!)`
+            if !has_useless_escapes {
+                // just a sanity check
+                assert_eq!(serialized_string, decoded);
+            }
+            return decoded;
         }
         serialized_string
     } else {

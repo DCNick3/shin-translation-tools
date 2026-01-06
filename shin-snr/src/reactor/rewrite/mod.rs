@@ -185,6 +185,7 @@ struct Stringer<'a, R> {
     bump: Bump,
     snr_style: MessageCommandStyle,
     user_style: MessageCommandStyle,
+    has_useless_escapes: bool,
     reflow_mode: MessageReflowMode<'a>,
     policy: StringPolicy,
     rewriter: R,
@@ -194,6 +195,7 @@ impl<'a, R> Stringer<'a, R> {
     pub fn new(
         snr_style: MessageCommandStyle,
         user_style: MessageCommandStyle,
+        has_useless_escapes: bool,
         reflow_mode: MessageReflowMode<'a>,
         policy: StringPolicy,
         rewriter: R,
@@ -202,6 +204,7 @@ impl<'a, R> Stringer<'a, R> {
             bump: Bump::new(),
             snr_style,
             user_style,
+            has_useless_escapes,
             reflow_mode,
             policy,
             rewriter,
@@ -258,6 +261,7 @@ impl<'a, R: StringRewriter> Stringer<'a, R> {
                             self.user_style,
                             self.reflow_mode,
                             self.snr_style,
+                            self.has_useless_escapes,
                             policy,
                             fixup_detect_result,
                             source,
@@ -271,6 +275,7 @@ impl<'a, R: StringRewriter> Stringer<'a, R> {
                         self.user_style,
                         self.reflow_mode,
                         self.snr_style,
+                        true,
                         source,
                     );
                     encode_utf8_zstring(&self.bump, transformed)
@@ -298,6 +303,7 @@ impl<'a, R> RewriteReactor<'a, R, BuildOffsetMapMode> {
         number_style: NumberStyle,
         snr_style: MessageCommandStyle,
         user_style: MessageCommandStyle,
+        has_useless_escapes: bool,
         reflow_mode: MessageReflowMode<'a>,
         policy: StringPolicy,
         rewriter: R,
@@ -305,7 +311,14 @@ impl<'a, R> RewriteReactor<'a, R, BuildOffsetMapMode> {
     ) -> Self {
         Self {
             position: Default::default(),
-            stringer: Stringer::new(snr_style, user_style, reflow_mode, policy, rewriter),
+            stringer: Stringer::new(
+                snr_style,
+                user_style,
+                has_useless_escapes,
+                reflow_mode,
+                policy,
+                rewriter,
+            ),
             mode: BuildOffsetMapMode {
                 builder: OffsetMapBuilder::new(),
                 serializing: InstructionSerializeContext::new(

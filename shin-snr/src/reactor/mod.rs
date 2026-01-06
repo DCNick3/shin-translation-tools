@@ -36,7 +36,7 @@ pub fn react_with<R: Reactor>(mut reader: Reader, schema: &EngineSchema, reactor
 
         let Some(opcode) = schema.lookup_opcode(raw_opcode) else {
             panic!(
-                "Undefined opcode: {:?} @ 0x{:08x}",
+                "Undefined opcode: 0x{:02x} @ 0x{:08x}",
                 raw_opcode, operation_position
             );
         };

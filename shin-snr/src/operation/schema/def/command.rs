@@ -23,7 +23,7 @@ pub(super) fn get_schema_for_command(
 
     match command {
         EXIT => match ctx.version() {
-            HigurashiSui | AliasCarnival => {
+            HigurashiSui | AliasCarnival | WorldRe => {
                 ctx.number();
             }
             WhiteEternity | HigurashiHou | HigurashiHouV2 | DC4 | Umineko | Gerokasu2 => {
@@ -43,7 +43,7 @@ pub(super) fn get_schema_for_command(
             ctx.number();
         }
         WAIT => match ctx.version() {
-            HigurashiSui | AliasCarnival => ctx.number(),
+            HigurashiSui | AliasCarnival | WorldRe => ctx.number(),
             WhiteEternity | HigurashiHou | HigurashiHouV2 | DC4 | Konosuba | Umineko
             | Gerokasu2 => {
                 ctx.u8();
@@ -51,14 +51,14 @@ pub(super) fn get_schema_for_command(
             }
         },
         KEYWAIT => match ctx.version() {
-            HigurashiSui | AliasCarnival => ctx.number(),
+            HigurashiSui | AliasCarnival | WorldRe => ctx.number(),
             WhiteEternity | HigurashiHou | HigurashiHouV2 | DC4 | Konosuba | Umineko
             | Gerokasu2 => {
                 return OperationResult::Unreachable;
             }
         },
         MSGINIT => match ctx.version() {
-            HigurashiSui | AliasCarnival | WhiteEternity => {
+            HigurashiSui | AliasCarnival | WorldRe | WhiteEternity => {
                 ctx.number();
                 ctx.number();
             }
@@ -79,6 +79,11 @@ pub(super) fn get_schema_for_command(
                     // nothing here
                 }
                 AliasCarnival => {
+                    ctx.number();
+                }
+                WorldRe => {
+                    ctx.number();
+                    ctx.number();
                     ctx.number();
                 }
                 WhiteEternity => {
@@ -115,7 +120,7 @@ pub(super) fn get_schema_for_command(
             ctx.number();
         }
         MSGCLOSE => match ctx.version() {
-            HigurashiSui | AliasCarnival => {}
+            HigurashiSui | AliasCarnival | WorldRe => {}
             WhiteEternity | HigurashiHou | HigurashiHouV2 | DC4 | Konosuba | Umineko
             | Gerokasu2 => {
                 ctx.u8();
@@ -134,7 +139,7 @@ pub(super) fn get_schema_for_command(
             guard!(HigurashiHouV2);
         }
         MSGFACE => match ctx.version() {
-            HigurashiSui | Konosuba | HigurashiHouV2 | Umineko => {
+            HigurashiSui | WorldRe | Konosuba | HigurashiHouV2 | Umineko => {
                 return OperationResult::Unreachable;
             }
             AliasCarnival => {
@@ -149,6 +154,12 @@ pub(super) fn get_schema_for_command(
         },
         LOGSET => match ctx.version() {
             HigurashiSui | WhiteEternity | HigurashiHou | HigurashiHouV2 => ctx.string(),
+            WorldRe => {
+                ctx.number();
+                ctx.number();
+                ctx.number();
+                ctx.string();
+            }
             AliasCarnival => {
                 ctx.number();
                 ctx.string();
@@ -164,7 +175,7 @@ pub(super) fn get_schema_for_command(
             ctx.string_array();
         }
         WIPE => match ctx.version() {
-            HigurashiSui => {
+            HigurashiSui | WorldRe => {
                 // this one is.... weird....
                 ctx.custom(OperationElement::HiguSuiWipeArg);
             }
@@ -197,7 +208,7 @@ pub(super) fn get_schema_for_command(
             ctx.number();
         }
         SEPLAY => match ctx.version() {
-            HigurashiSui | AliasCarnival => {
+            HigurashiSui | AliasCarnival | WorldRe => {
                 // 5x number
                 ctx.number();
                 ctx.number();
@@ -248,7 +259,7 @@ pub(super) fn get_schema_for_command(
             ctx.number();
         }
         SEONCE => match ctx.version() {
-            HigurashiSui | AliasCarnival => {
+            HigurashiSui | AliasCarnival | WorldRe => {
                 // 3x number
                 ctx.number();
                 ctx.number();
@@ -327,7 +338,7 @@ pub(super) fn get_schema_for_command(
             ctx.number();
         }
         UNLOCK => match ctx.version() {
-            HigurashiSui | AliasCarnival | WhiteEternity | Konosuba => {
+            HigurashiSui | AliasCarnival | WorldRe | WhiteEternity | Konosuba => {
                 return OperationResult::Unreachable;
             }
             DC4 | Gerokasu2 => {
@@ -362,7 +373,7 @@ pub(super) fn get_schema_for_command(
             ctx.bitmask_number_array();
         }
         LAYERWAIT => match ctx.version() {
-            HigurashiSui => {
+            HigurashiSui | WorldRe => {
                 ctx.number();
                 ctx.number();
             }
@@ -451,9 +462,9 @@ pub(super) fn get_schema_for_command(
             guard!(AliasCarnival);
         }
 
-        // White Eternity
+        // CHAR* commands, present in White Eternity and WorldRe
         CHARCLEAR => {
-            guard!(WhiteEternity);
+            guard!(WorldRe | WhiteEternity);
         }
         CHARLOAD => {
             guard!(WhiteEternity);
@@ -466,29 +477,57 @@ pub(super) fn get_schema_for_command(
             ctx.number();
         }
         CHARDISP => {
-            guard!(WhiteEternity);
+            guard!(WorldRe | WhiteEternity);
             ctx.number();
             ctx.number();
         }
         CHARCTRL => {
-            guard!(WhiteEternity);
+            guard!(WorldRe | WhiteEternity);
             ctx.number();
             ctx.number();
             ctx.bitmask_number_array();
         }
-        CHARWAIT => {
-            guard!(WhiteEternity);
-            ctx.number();
-            ctx.number_array(LengthKind::U8Length);
-        }
+        CHARWAIT => match ctx.version() {
+            WorldRe => {
+                ctx.number();
+                ctx.number();
+            }
+            WhiteEternity => {
+                ctx.number();
+                ctx.number_array(LengthKind::U8Length);
+            }
+            _ => return OperationResult::Unreachable,
+        },
         CHARMARK => {
-            guard!(WhiteEternity);
+            guard!(WorldRe | WhiteEternity);
             ctx.number();
             ctx.number();
             ctx.number();
         }
         CHARSYNC => {
             guard!(WhiteEternity);
+        }
+        CHARSET => {
+            guard!(WorldRe);
+            ctx.number();
+            ctx.number();
+            ctx.number();
+            ctx.bitmask_number_array();
+        }
+        CHARDEL => {
+            guard!(WorldRe);
+            ctx.number();
+            ctx.number();
+        }
+        CHARRGB => {
+            guard!(WorldRe);
+            ctx.number();
+            ctx.number();
+            ctx.number();
+        }
+        CHARFUKI => {
+            guard!(WorldRe);
+            ctx.number();
         }
 
         // DC4
@@ -514,11 +553,11 @@ pub(super) fn get_schema_for_command(
 
         // Higurashi Sui
         TIPSGET => {
-            guard!(HigurashiSui | HigurashiHou | HigurashiHouV2 | Umineko);
+            guard!(HigurashiSui | WorldRe | HigurashiHou | HigurashiHouV2 | Umineko);
             ctx.number_array(LengthKind::U8Length);
         }
         CHARSEL => {
-            guard!(HigurashiSui);
+            guard!(WorldRe | HigurashiSui);
             // not _too_ sure about these, but on higu sui engine these are all shorts :shrug:
             ctx.u16();
             ctx.reg();
@@ -526,7 +565,7 @@ pub(super) fn get_schema_for_command(
             ctx.number();
         }
         OTSUGET => {
-            guard!(@higurashi);
+            guard!(HigurashiSui | WorldRe | HigurashiHou | HigurashiHouV2);
             ctx.number();
         }
         CHART => {
@@ -558,7 +597,7 @@ pub(super) fn get_schema_for_command(
                 Umineko | Gerokasu2 => {
                     ctx.number();
                 }
-                AliasCarnival | WhiteEternity | DC4 | Konosuba => {
+                AliasCarnival | WhiteEternity | WorldRe | DC4 | Konosuba => {
                     return OperationResult::Unreachable;
                 }
             }
@@ -610,7 +649,7 @@ pub(super) fn get_schema_for_command(
         }
 
         DEBUGOUT => match ctx.version() {
-            HigurashiSui => return OperationResult::Unreachable,
+            HigurashiSui | WorldRe => return OperationResult::Unreachable,
             AliasCarnival => {
                 ctx.string();
                 ctx.u16();

@@ -142,7 +142,7 @@ pub enum Command {
     NAMED,
     BACKINIT,
 
-    // White Eternity
+    // CHAR* commands, present in White Eternity and WorldRe
     CHARCLEAR,
     CHARLOAD,
     CHARUNLOAD,
@@ -151,6 +151,10 @@ pub enum Command {
     CHARWAIT,
     CHARMARK,
     CHARSYNC,
+    CHARSET,
+    CHARDEL,
+    CHARRGB,
+    CHARFUKI,
 
     // DC4
     CHATSET,

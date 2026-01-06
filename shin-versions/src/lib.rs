@@ -23,6 +23,8 @@ pub enum ShinVersion {
     HigurashiSui,
     /// 2015-10-29 PSVita `PCSG00628`
     AliasCarnival,
+    /// 2016-08-23 PSVita `PCSG00462`
+    WorldRe,
     /// 2016-09-22 PSVita `PCSG00901`
     WhiteEternity,
 
@@ -51,7 +53,7 @@ mod verpat {
     #[macro_export]
     macro_rules! verpat {
         (@pre-shin) => {
-            HigurashiSui | AliasCarnival
+            HigurashiSui | AliasCarnival | WorldRe
         };
         (@post-shin) => {
             WhiteEternity | HigurashiHou | HigurashiHouV2 | DC4 | Konosuba | Umineko | Gerokasu2
@@ -71,9 +73,10 @@ mod verpat {
                 | DC4
                 | Umineko
                 | Gerokasu2
+                | WorldRe
         };
         (@vita) => {
-            HigurashiSui | AliasCarnival | WhiteEternity
+            HigurashiSui | AliasCarnival | WhiteEternity | WorldRe
         };
         (@switch) => {
             HigurashiHou | HigurashiHouV2 | DC4 | Konosuba | Umineko | Gerokasu2
@@ -181,7 +184,7 @@ impl ShinVersion {
         use ShinVersion::*;
 
         match self {
-            HigurashiSui | AliasCarnival | WhiteEternity => U16,
+            HigurashiSui | AliasCarnival | WhiteEternity | WorldRe => U16,
             HigurashiHou | HigurashiHouV2 | DC4 | Konosuba | Umineko | Gerokasu2 => VarInt,
         }
     }
@@ -191,7 +194,7 @@ impl ShinVersion {
         use ShinVersion::*;
 
         match self {
-            HigurashiSui | AliasCarnival => LengthKind::U8Length,
+            HigurashiSui | AliasCarnival | WorldRe => LengthKind::U8Length,
             WhiteEternity | HigurashiHou | HigurashiHouV2 | DC4 | Konosuba | Umineko
             | Gerokasu2 => LengthKind::U16Length,
         }
@@ -203,11 +206,10 @@ impl ShinVersion {
 
         match self {
             HigurashiHou | HigurashiHouV2 => LengthKind::U8Length,
-            // TODO: are all those old versions __really__ all using u16?
+            // SUS: are all those old versions __really__ all using u16?
             // The trend has been in increasing the sizes, not randomly decreasing them for a single series
-            HigurashiSui | AliasCarnival | WhiteEternity | DC4 | Konosuba | Umineko | Gerokasu2 => {
-                LengthKind::U16Length
-            }
+            HigurashiSui | AliasCarnival | WorldRe | WhiteEternity | DC4 | Konosuba | Umineko
+            | Gerokasu2 => LengthKind::U16Length,
         }
     }
 
@@ -221,6 +223,7 @@ impl ShinVersion {
                 Saveinfo | Select | Voiceplay => U8Length,
                 Msgset | Logset => U16Length,
                 Dbgout | Chatset | Named | Stageinfo => {
+                    // not in this game
                     unreachable!()
                 }
             },
@@ -228,6 +231,14 @@ impl ShinVersion {
                 Saveinfo | Select | Dbgout | Voiceplay | Stageinfo | Named => U8Length,
                 Msgset | Logset => U16Length,
                 Chatset => {
+                    // not in this game
+                    unreachable!()
+                }
+            },
+            WorldRe => match kind {
+                Saveinfo | Select | Voiceplay => U8Length,
+                Msgset | Logset => U16Length,
+                Dbgout | Chatset | Named | Stageinfo => {
                     // not in this game
                     unreachable!()
                 }
@@ -302,6 +313,9 @@ impl ShinVersion {
             AliasCarnival => match kind {
                 SelectChoice => U8Length,
             },
+            WorldRe => match kind {
+                SelectChoice => U8Length,
+            },
             WhiteEternity => match kind {
                 SelectChoice => U8Length,
             },
@@ -339,6 +353,10 @@ impl ShinVersion {
                 fixup_command_arguments: false,
                 fixup_character_names: false,
             }),
+            WorldRe => StringPolicy::ShiftJis(SjisMessageFixupPolicy {
+                fixup_command_arguments: false,
+                fixup_character_names: true,
+            }),
             WhiteEternity => StringPolicy::ShiftJis(SjisMessageFixupPolicy {
                 fixup_command_arguments: false,
                 fixup_character_names: true,
@@ -370,7 +388,7 @@ impl ShinVersion {
         use ShinVersion::*;
 
         match self {
-            HigurashiSui | AliasCarnival => MessageCommandStyle::Unescaped,
+            HigurashiSui | AliasCarnival | WorldRe => MessageCommandStyle::Unescaped,
             WhiteEternity | HigurashiHou | HigurashiHouV2 | DC4 | Konosuba | Umineko
             | Gerokasu2 => MessageCommandStyle::Escaped,
         }
@@ -386,6 +404,7 @@ impl ShinVersion {
         Some(match self {
             HigurashiSui => Rom2V1_0,
             AliasCarnival => Rom2V1_0,
+            WorldRe => Rom1V2_1,
             WhiteEternity => Rom2V1_0,
             HigurashiHou => Rom2V1_0,
             HigurashiHouV2 => Rom2V1_0,
@@ -395,6 +414,19 @@ impl ShinVersion {
             // konosuba doesn't store its assets in the rom, it just uses switch's romfs
             Konosuba => return None,
         })
+    }
+
+    pub fn has_needless_escapes(&self) -> bool {
+        use ShinVersion::*;
+        match self {
+            // Here's the string with useless escapes:
+            // `r　両目を見開き、こんな感じの顔をした→!(!？Д!？!)`
+            // `？` is not an ascii-character (it's a full-width question mark)
+            // this causes issues with some of our asserts
+            WorldRe => true,
+            HigurashiSui | AliasCarnival | WhiteEternity | HigurashiHou | HigurashiHouV2 | DC4
+            | Konosuba | Umineko | Gerokasu2 => false,
+        }
     }
 }
 

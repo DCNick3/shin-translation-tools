@@ -27,6 +27,8 @@ pub(super) fn get_schema_for_instruction(
         Instruction::bo => {
             ctx.operation();
             ctx.reg();
+            // SUS: for WorldRe it goes "number, optional number"
+            // is this true for other versions?
             ctx.optional_number();
             ctx.number();
         }

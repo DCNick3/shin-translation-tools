@@ -109,13 +109,17 @@ fn format_invalid_policy(decoded: &str, map: &[FixupDetectResult], policy: &[boo
     }
 
     println!(
-        "invalid fixup policy:\n|{}\n|{}\n|{}\n",
+        "invalid fixup policy:\nstring:   |{}\ndetected: |{}\npolicy:   |{}\n",
         subline1, subline2, subline3
     );
     panic!("invalid fixup policy");
 }
 fn validate_fixup_policy(decoded: &str, detection_map: &[FixupDetectResult], policy: &[bool]) {
     let mut valid = true;
+
+    if policy.len() != decoded.chars().count() {
+        panic!("policy length mismatch");
+    }
 
     for (detection, &policy) in detection_map.iter().zip(policy) {
         match detection {
@@ -132,10 +136,6 @@ fn validate_fixup_policy(decoded: &str, detection_map: &[FixupDetectResult], pol
 
     if !valid {
         format_invalid_policy(decoded, detection_map, policy);
-    }
-
-    if policy.len() != decoded.chars().count() {
-        panic!("policy length mismatch");
     }
 }
 
@@ -164,6 +164,7 @@ impl StringRoundtripValidatorReactor {
             self.snr_style,
             MessageReflowMode::NoReflow,
             self.user_style,
+            false,
             source,
         );
 
@@ -180,6 +181,7 @@ impl StringRoundtripValidatorReactor {
                         self.user_style,
                         MessageReflowMode::NoReflow,
                         self.snr_style,
+                        false,
                         policy,
                         FixupDetectResult::merge_all(&fixup_map),
                         source,
@@ -201,6 +203,7 @@ impl StringRoundtripValidatorReactor {
                     self.user_style,
                     MessageReflowMode::NoReflow,
                     self.snr_style,
+                    false,
                     source,
                 );
 

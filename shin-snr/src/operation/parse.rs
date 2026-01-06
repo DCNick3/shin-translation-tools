@@ -229,11 +229,7 @@ mod test {
     use shin_versions::ShinVersion;
 
     use crate::{
-        operation::{
-            arena::{OperationArena, OperationArenaPosition},
-            parse::InstructionParseContext,
-            schema::ENGINE_SCHEMAS,
-        },
+        operation::{arena::OperationArena, schema::ENGINE_SCHEMAS},
         reader::Reader,
     };
 

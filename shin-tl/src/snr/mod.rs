@@ -189,6 +189,7 @@ fn rewrite_snr<'a, R, O>(
         version.number_style(),
         version.message_command_style(),
         user_style,
+        version.has_needless_escapes(),
         reflow_mode,
         version.string_policy(),
         rewriter,
@@ -318,6 +319,7 @@ impl Command {
                     encoding,
                     snr_style,
                     user_style,
+                    version.has_needless_escapes(),
                     CsvTraceListener::new(writer),
                 );
 
@@ -331,8 +333,13 @@ impl Command {
                 let snr_style = version.message_command_style();
                 let user_style = message_style.apply(snr_style);
 
-                let mut reactor =
-                    StringTraceReactor::new(encoding, snr_style, user_style, ConsoleTraceListener);
+                let mut reactor = StringTraceReactor::new(
+                    encoding,
+                    snr_style,
+                    user_style,
+                    version.has_needless_escapes(),
+                    ConsoleTraceListener,
+                );
 
                 react_with(reader, schema, &mut reactor);
             }
