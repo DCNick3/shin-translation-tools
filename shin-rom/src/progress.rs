@@ -8,8 +8,9 @@ use tracing_indicatif::span_ext::IndicatifSpanExt;
 
 #[derive(Default, Copy, Clone)]
 pub struct RomCounter {
-    files: u64,
-    bytes: u64,
+    pub directories: u64,
+    pub files: u64,
+    pub bytes: u64,
 }
 
 impl RomCounter {
@@ -20,6 +21,9 @@ impl RomCounter {
     pub fn add_file(&mut self, size: u64) {
         self.files += 1;
         self.bytes += size;
+    }
+    pub fn add_directory(&mut self) {
+        self.directories += 1;
     }
 }
 

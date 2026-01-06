@@ -1,4 +1,4 @@
-mod iter;
+pub(crate) mod iter;
 
 use std::{fs::File, io::Read as _};
 
@@ -99,6 +99,63 @@ pub fn rom_extract(rom_path: Utf8PathBuf, output_path: Utf8PathBuf, version: Opt
     }
 
     timing_summary.finish(total_counts);
+
+    if version.encoding() != RomEncoding::Utf8 {
+        let used_memory = ctx.bump.allocated_bytes();
+        info!("Used string memory: {} bytes", used_memory);
+    }
+}
+
+pub fn rom_info(rom_path: Utf8PathBuf, version: Option<RomVersion>) {
+    let rom_file = File::open(&rom_path).expect("Failed to open rom file");
+    let rom_file = unsafe { memmap2::Mmap::map(&rom_file) }.expect("Failed to mmap rom file");
+
+    let rom = rom_file.as_ref();
+    let mut cursor = std::io::Cursor::new(&rom);
+
+    let mut head_bytes = [0; RomVersion::HEAD_BYTES_SIZE];
+    cursor.read_exact(&mut head_bytes).unwrap();
+
+    let version_specified = version.is_some();
+    let version = version.unwrap_or_else(|| RomVersion::detect(&head_bytes));
+
+    info!(
+        "ROM version: {:?} {}",
+        version,
+        if version_specified {
+            "(specified by user)"
+        } else {
+            "(guessed from file contents)"
+        }
+    );
+
+    let header = RomHeader::read_args(&mut cursor, (version,)).unwrap();
+    info!("Header: {:x?}", header);
+
+    #[cfg(unix)]
+    rom_file
+        .advise_range(
+            memmap2::Advice::WillNeed,
+            cursor.position() as usize,
+            header.index_size(),
+        )
+        .expect("Failed to advise rom index");
+
+    let index = &rom[cursor.position() as usize..][..header.index_size()];
+
+    let ctx = DirectoryIterCtx {
+        bump: Bump::new(),
+        version,
+        index_start_offset: cursor.position() as usize,
+        file_offset_multiplier: header.file_offset_multiplier(),
+        index,
+        rom,
+    };
+    let total_counts = iter::rom_count_total(&ctx);
+
+    info!("       Directories: {}", total_counts.directories);
+    info!("             Files: {}", total_counts.files);
+    info!("  Total File Sizes: {} bytes", total_counts.bytes);
 
     if version.encoding() != RomEncoding::Utf8 {
         let used_memory = ctx.bump.allocated_bytes();

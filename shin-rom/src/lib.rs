@@ -17,4 +17,4 @@ mod extract;
 mod index;
 
 pub use create::rom_create;
-pub use extract::rom_extract;
+pub use extract::{rom_extract, rom_info};

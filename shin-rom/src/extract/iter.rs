@@ -8,7 +8,7 @@ use bumpalo::Bump;
 use shin_versions::{RomDirectoryOffsetDisposition, RomEncoding, RomVersion};
 
 use crate::{
-    index::{RawEntry, DIRECTORY_OFFSET_MULTIPLIER},
+    index::{DIRECTORY_OFFSET_MULTIPLIER, RawEntry},
     progress::RomCounter,
 };
 
@@ -137,9 +137,12 @@ pub fn walk_rom<F: FnMut(&str, &EntryContent)>(ctx: &DirectoryIterCtx, mut f: F)
 
 pub fn rom_count_total(ctx: &DirectoryIterCtx) -> RomCounter {
     let mut counter = RomCounter::new();
-    walk_rom(ctx, |_, entry| {
-        if let EntryContent::File(file) = entry {
+    walk_rom(ctx, |_, entry| match entry {
+        EntryContent::File(file) => {
             counter.add_file(file.len() as u64);
+        }
+        EntryContent::Directory(_) => {
+            counter.add_directory();
         }
     });
     counter

@@ -232,4 +232,15 @@ impl<'bump, S: FileSource> DirVisitor<'bump, S> for RomCounter {
                 .expect("Failed to get file size"),
         );
     }
+
+    fn visit_directory(
+        &mut self,
+        _index: usize,
+        _name: &'bump str,
+        _encoded_name: &'bump [u8],
+        _path_buf: &mut Utf8PathBuf,
+        _directory: &InputDirectory<'bump, S>,
+    ) {
+        self.add_directory();
+    }
 }

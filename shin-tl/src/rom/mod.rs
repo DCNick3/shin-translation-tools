@@ -30,6 +30,14 @@ pub enum Command {
         #[clap(short, long, value_parser = RomVersionSpecifier::parser())]
         rom_version: RomVersionSpecifier,
     },
+    /// Print some information about a rom file.
+    Info {
+        /// The path to the rom to print info on.
+        rom_path: Utf8PathBuf,
+        /// Specify the version of the rom format to use. Will be detected automatically if not specified.
+        #[clap(short, long, value_parser = RomVersionSpecifier::parser())]
+        rom_version: Option<RomVersionSpecifier>,
+    },
 }
 
 impl Command {
@@ -40,6 +48,10 @@ impl Command {
                 output_path,
                 rom_version,
             } => shin_rom::rom_extract(rom_path, output_path, rom_version.map(|v| v.rom_version())),
+            Command::Info {
+                rom_path,
+                rom_version,
+            } => shin_rom::rom_info(rom_path, rom_version.map(|v| v.rom_version())),
             Command::Create {
                 source_directory,
                 output_path,
