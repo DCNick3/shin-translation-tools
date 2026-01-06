@@ -402,7 +402,7 @@ impl ShinVersion {
         use RomVersion::*;
         use ShinVersion::*;
         Some(match self {
-            HigurashiSui => Rom2V1_0,
+            HigurashiSui => Rom1V2_1,
             AliasCarnival => Rom2V1_0,
             WorldRe => Rom1V2_1,
             WhiteEternity => Rom2V1_0,
