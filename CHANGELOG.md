@@ -1,3 +1,18 @@
+# Version 0.10.4
+
+- Adds support for rewriting Irotoridori no Sekai World's End -Re:Birth- PS Vita scenarios (`PCSG00462`, released on
+  2016-08-23).
+- Refactors the parser/rewriter system. Instead of hand-writing the parsing logic, it now operates on opcode
+  schema, giving more capabilities to analyze the schema evolution over time and reducing boilerplate a little.
+  This should not result in any visible changes.
+- Fixes a bug, where the wrong ROM version was used for `higurashi-sui` ROMs  (`Rom2V1_0` instead of `Rom1V2_1`).
+- Adds a new subcommand: `rom info`. It will print some information about a ROM file:
+    - ROM version (either detected or passed by the user)
+    - ROM Header contents
+    - Number of files and directories
+    - Total file size of files
+    - Amount of string memory used to traverse the ROM
+
 # Version 0.10.3
 
 - Fixes a [bug](https://github.com/DCNick3/shin-translation-tools/issues/8) in ROM generation code
