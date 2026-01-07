@@ -2,6 +2,8 @@
 
 - Adds support for rewriting Irotoridori no Sekai World's End -Re:Birth- PS Vita scenarios (`PCSG00462`, released on
   2016-08-23).
+    - Same as with `higurashi-hou`, we can't produce byte-for-byte equal scripts, because this game's script includes an
+      unnecessary `!`-escape for a full-width `？`, which our modernization-related logic removes on the round trip.
 - Refactors the parser/rewriter system. Instead of hand-writing the parsing logic, it now operates on opcode
   schema, giving more capabilities to analyze the schema evolution over time and reducing boilerplate a little.
   This should not result in any visible changes.
